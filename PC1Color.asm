@@ -5,11 +5,8 @@
 ; TARGET: NASM -> .COM
 ; CPU: NEC V40 (8088 compatible)
 ; Thanks to Simone Riminucci for showing us that this was possible.
-; Thanks to John Elliott  for his work gathering documentation.
-; And thanks to VS COde and Copilot for Github.
-; SOURCES: 
-; - 6355 LCDC Video Controller Manual (Port/Register specifications)
-
+; Thanks to John Elliott for his work gathering documentation.
+; And thanks to VS Code and Copilot for Github.
 
 org 0x100
 
