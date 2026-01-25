@@ -11,7 +11,7 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC (Liquid Crystal Display C
 | Component | Details |
 |-----------|---------|
 | **Computer** | Olivetti Prodest PC1 (Italian XT-compatible) |
-| **CPU** | NEC V40 (8088-compatible) |
+| **CPU** | NEC V40 (8088/80186-compatible) |
 | **Video Chip** | Yamaha V6355D LCDC |
 | **VRAM** | 16KB DRAM |
 | **Display** | Composite RGB SCART monitor (PAL standard) |

@@ -1,4 +1,4 @@
-; ============================================================================
+colors; ============================================================================
 ; COLORBARS.ASM (v59) - 16 Color Bar Demo for Olivetti Prodest PC1
 ; Hidden 160x200x16 Graphics Mode
 ; Written for NASM - NEC V40 (80186 compatible)
