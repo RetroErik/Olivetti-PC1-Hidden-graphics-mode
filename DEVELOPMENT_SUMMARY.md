@@ -11,7 +11,7 @@
 | **Computer** | Olivetti Prodest PC1 (Italian XT-compatible) |
 | **CPU** | NEC V40 (8088-compatible) |
 | **Video Chip** | Yamaha V6355D LCDC (Liquid Crystal Display Controller) |
-| **VRAM** | 16KB DRAM (mirrored 4× across address space B000–BFFF) |
+| **VRAM** | 16KB DRAM (segment 0xB000) |
 | **Display** | Composite RGB SCART monitor (PAL standard, 50Hz, 625 scan lines) |
 | **Target Resolution** | 160×200 pixels, 16 colors |
 | **Target Mode** | Hidden/undocumented graphics mode (not enabled by BIOS) |
@@ -22,49 +22,47 @@
 
 | Port | Direction | Name | Function |
 |------|-----------|------|----------|
-| **0x3D8** | Write Only | Mode Control Register | Sets graphics/text mode, video enable, 16-color unlock (Bit 6) |
-| **0x3D9** | Write Only | Color Select Register | Sets border/overscan color (0-15) |
-| **0x3DA** | Read Only | Status Register | Display status (retrace detection) |
-| **0x3DD** | Read/Write | Register Bank Address | Select internal register (0x40–0x6F) |
-| **0x3DE** | Read/Write | Register Bank Data | Read/write selected register value |
-| **0x3DF** | Read/Write | Display Page | Page select (not used for 16KB DRAM PC1) |
+| **0xD8** | Write Only | Mode Control Register | Sets graphics/text mode, video enable, 16-color unlock (Bit 6) |
+| **0xD9** | Write Only | Color Select Register | Sets border/overscan color (0-15) |
+| **0xDD** | Read/Write | Register Bank Address | Select internal register (0x40–0x6F) |
+| **0xDE** | Read/Write | Register Bank Data | Read/write selected register value |
 
 ---
 
-## Critical Register Addresses (via 0x3DD/0x3DE)
+## Critical Register Addresses (via 0xDD/0xDE)
 
 | Register | Address | Purpose | Current Value | Notes |
 |----------|---------|---------|----------------|-------|
 | Monitor Control | 0x65 | Vertical lines, TV standard, RAM type, CRT/LCD | **0x09** | 200 lines, PAL, CRT, DRAM |
-| Configuration | 0x67 | Planar merge, page mode, centering | **0x98** | Planar ON, Page mode OFF, centering=24 |
-| Palette Base | 0x40–0x5F | 16 color entries (2 bytes each) | Custom RGB | 12-bit RGB format (4 bits per channel) |
+| Configuration | 0x67 | Planar merge, page mode, centering | **0x18** | Planar OFF, Page mode OFF, centering (recommended for PC1) |
+| Palette Base | 0x40–0x5F | 16 color entries (2 bytes each) | Custom RGB | 9-bit RGB format (3 bits per channel, 512 colors) |
 
 ---
 
-## Port 0x3D8 - Mode Control Register (Bit Analysis)
+## Port 0xD8 - Mode Control Register (Bit Analysis)
 
-### Verified Bit Definitions (per ACV-1030 Manual)
+### Verified Bit Definitions
 
 | Bit | CGA Standard | Extended Function | 160×200×16 Value |
 |-----|--------------|-------------------|-------------------|
 | 0 | 0=40×25, 1=80×25 text | — | **0** (40-col) |
 | 1 | 0=text, 1=graphics | — | **1** (graphics) |
 | 2 | 0=color, 1=mono | — | **0** (color) |
-| 3 | 0=blank, 1=active | Video enable | **1→0→1** (unlock→set→finalize) |
+| 3 | 0=blank, 1=active | Video enable | **1** |
 | 4 | 0=320×200, 1=640×200 | Resolution select | **0** (160×200 via Bit 6) |
 | 5 | 0=blinker off, 1=on | Blink enable | **0** (off) |
 | **6** | **Unused in CGA** | **16-COLOR MODE ENABLE** | **1** ✓ **CRITICAL** |
 | 7 | — | Standby/power save | **0** (normal) |
 
-### Three-Step Initialization Sequence
+### Initialization Sequence (per colorbars.asm)
 
 ```
-Step 1: Write 0x4A to Port 0x3D8  (01001010b = Unlock + video ON + graphics ON)
-Step 2: Write 0x42 to Port 0x3D8  (01000010b = Set mode + video OFF to prevent noise)
-Step 3: Write 0x4A to Port 0x3D8  (01001010b = Finalize + video ON)
+1. Set register 0x67 to 0x18 via ports 0xDD (address) and 0xDE (data)
+2. Set register 0x65 to 0x09 via ports 0xDD/0xDE
+3. Write 0x4A to port 0xD8 (enable 16-color mode)
+4. Set border color to black via port 0xD9
+5. Write palette: 0x40 to 0xDD, 32 bytes to 0xDE, then 0x80 to 0xDD
 ```
-
-**Status:** ✅ **VERIFIED CORRECT** against ACV-1030 graphics card manual
 
 ---
 
@@ -82,42 +80,31 @@ Step 3: Write 0x4A to Port 0x3D8  (01001010b = Finalize + video ON)
 
 **Current Value:** 0x09 (00001001b) = 200 lines, PAL, CRT, DRAM
 
-**Status:** ✅ **VERIFIED CORRECT** (was 0x08, corrected to 0x09 for 200 lines)
-
 ---
 
 ## Register 0x67 - Configuration Mode (Bit Analysis)
 
-| Bits | Name | Function | 0x98 Value | Status |
+| Bits | Name | Function | 0x18 Value | Status |
 |------|------|----------|-----------|--------|
-| 0–2 | CENTER[2:0] | Horizontal centering low | **000** | Part of 5-bit value |
-| 3–4 | CENTER[4:3] | Horizontal centering high | **11** | Combined = 11000b = 24 decimal |
+| 0–2 | CENTER[2:0] | Horizontal centering low | **000** | Default |
+| 3–4 | CENTER[4:3] | Horizontal centering high | **11** | Recommended for PC1 |
 | 5 | LCD Period | LCD control signal timing | **0** | 0=CRT timing |
-| 6 | Page Mode | 4-page VRAM mode | **0** | ⚠️ **CRITICAL: OFF** |
-| 7 | 16-bit Bus | Planar memory merge | **1** | ✅ **CRITICAL: ON** |
+| 6 | Page Mode | 4-page VRAM mode | **0** | OFF |
+| 7 | Planar merge | Planar memory merge | **0** | OFF |
 
-### Why Bit 6 = 0 (Page Mode OFF)
-
-- **Manual states:** "Page mode requires 64KB DRAM split into four pages"
-- **PC1 hardware:** Only has 16KB DRAM (mirrored 4×, not paged)
-- **Result if ON:** Memory addressing wraps, causes overlapping/corrupted bars
-- **Solution:** Keep Bit 6 = 0 for safe linear addressing
-
-**Current Value:** 0x98 (10011000b)
-
-**Centering Value:** 24 (discovered by Peritel.com reverse-engineering)
-
-**Status:** ✅ **VERIFIED CORRECT**
+**Current Value:** 0x18 (00011000b)
 
 ---
 
 ## Palette Configuration
 
-### Format: 12-bit RGB (per 6355 LCDC Manual Table 14-26)
+### Format: 9-bit RGB (per colorbars.asm)
 
 - **Register Range:** 0x40–0x5F (16 colors, 2 bytes each)
-- **Even Register (0x40, 0x42, ...):** Red (bits 0–3, 0–15 intensity)
-- **Odd Register (0x41, 0x43, ...):** Green (bits 4–7, 0–15 intensity) + Blue (bits 0–3, 0–15 intensity)
+- **Byte 1:** Red (bits 0–2, 0–7 intensity)
+- **Byte 2:** Green (bits 4–6, 0–7 intensity) + Blue (bits 0–2, 0–7 intensity)
+
+> **Note:** The Yamaha V6355D chip supports 4 bits per channel (12-bit RGB, 4096 colors) in its palette registers. However, on the Olivetti Prodest PC1, only 3 bits per channel (9-bit RGB, 512 colors) are actually output, because the hardware is not physically wired to a DAC that handles the full 4 bits per channel. So, while you can program 4096 possible colors in the registers, only 512 unique colors can be displayed on the PC1’s output.
 
 ### Example Color Entry (Color 0 = Black)
 
@@ -129,12 +116,11 @@ Register 0x41: 0x00  (Green = 0, Blue = 0)
 ### Access Method
 
 ```asm
-mov al, 0x40            ; Select palette base register
-out 0x3DD, al           ; Register Bank Address
-mov al, RED_VALUE
-out 0x3DE, al           ; Register Bank Data (auto-increments)
-mov al, GREEN_BLUE_VALUE
-out 0x3DE, al           ; Register Bank Data (next register)
+mov al, 0x40            ; Enable palette write
+out 0xDD, al            ; Register Bank Address
+; Output 32 bytes to 0xDE (16 colors × 2 bytes)
+mov al, 0x80            ; Disable palette write
+out 0xDD, al            ; Register Bank Address
 ```
 
 **Status:** ✅ **VERIFIED** (current code writes 16 colors × 2 bytes = 32 bytes total)
@@ -144,25 +130,14 @@ out 0x3DE, al           ; Register Bank Data (next register)
 ## VRAM Memory Architecture
 
 ### Physical Layout
-- **16KB DRAM block** located at hardware address 0xB800 (physical)
-- **Mirrored 4 times** in CPU address space:
-  - B000:0000–B3FF:FFFF (16KB mirror 1)
-  - B400:0000–B7FF:FFFF (16KB mirror 2)
-  - B800:0000–BBFF:FFFF (16KB mirror 3, BIOS default)
-  - BC00:0000–BFFF:FFFF (16KB mirror 4)
+- **16KB DRAM block** located at hardware segment 0xB000
 
-### Planar vs. Linear Addressing
+#### Addressing (colorbars.asm)
+- Even rows:  0xB000:0000–0xB000:1FFF
+- Odd rows:   0xB000:2000–0xB000:3FFF
+- Each byte holds two pixels (packed nibbles)
 
-#### With Register 0x67 Bit 7 = 0 (Split Addressing)
-- Even pixels: B800:0000–0x3FFF
-- Odd pixels: B800:2000–0x5FFF (offset by 8KB)
-- Creates CGA-style horizontal pixel split
-
-#### With Register 0x67 Bit 7 = 1 (Planar Merge, CURRENT)
-- Linear addressing: B800:0000–0x3FFF (entire 16KB accessible sequentially)
-- Simplifies pixel writing (no bank switching needed)
-
-**Current Code:** Uses B800:0000 with planar merge enabled
+**Current Code:** Uses 0xB000 segment, planar merge OFF
 
 ---
 
@@ -186,62 +161,17 @@ mov dx, 200             ; 200 rows
   dec dx
 ```
 
-**Status:** ✅ **Logic verified** (assumes planar mode working)
+**Status:** ✅ **Logic verified**
 
 ---
 
-## Critical Corrections Made
-
-### 1. **I/O Port Addresses** ✅
-- **Before:** 0x0D/0x0E (OCR misread of manual shorthand)
-- **After:** 0x3DD/0x3DE (full I/O address space)
-- **Source:** 6355 LCDC manual Table 14-21
-
-### 2. **Palette Register Base Address** ✅
-- **Before:** 0x20 (misread binary 0010 0000b)
-- **After:** 0x40 (correct binary 0100 0000b = 64 decimal)
-- **Source:** 6355 LCDC manual Table 14-26
-
-### 3. **Vertical Line Count** ✅
-- **Before:** 0x08 (gives 192 lines: bits 0-1 = 00)
-- **After:** 0x09 (gives 200 lines: bits 0-1 = 01)
-- **Source:** 6355 LCDC manual Table 14-28
-
-### 4. **Video Re-enable Sequence** ✅
-- **Before:** 0x4A → 0x42 (2 steps, video left disabled)
-- **After:** 0x4A → 0x42 → 0x4A (3 steps, video properly finalized)
-- **Reason:** Prevent display artifacts during mode transition
-- **Source:** ACV-1030 manual discussion of mode switching
-
-### 5. **Page Mode (Bit 6, Register 0x67)** ✅
-- **Before:** Enabled (0xD8 with bit 6 = 1)
-- **After:** Disabled (0x98 with bit 6 = 0)
-- **Reason:** PC1 has 16KB DRAM; page mode requires 64KB DRAM
-- **Result:** Prevents overlapping bar issue
-- **Source:** Datasheet analysis + John Elliott documentation
-
-### 6. **Mode Control Register Bit 6 (Port 0x3D8)** ✅
-- **Before:** Labeled "Mode Unlock" (confusion with Zenith docs)
-- **After:** Correctly identified as **16-Color Graphics Enable** (per ACV-1030)
-- **Values:** Already correct in code (0x4A and 0x42 both have Bit 6 = 1)
-
----
-
-## Code Files
-
-### Primary Working File
-- **[a08.asm](160x200x16%20graphics%20mode/a08.asm)** - Latest verified version with all corrections
-  - Includes three-step Port 0x3D8 initialization
+## Primary Working File
+- **[Colorbars.asm](Olivetti-PC1-Hidden%20graphics%20mode/Colorbars.asm)** - Latest verified version with all corrections
+  - Includes initialization for Port 0xD8, 0xDD/0xDE
   - Correct Register 0x65 value (0x09)
-  - Correct Register 0x67 value (0x98)
-  - Proper palette loading (0x40–0x5F)
-  - Rainbow color table (16 colors, 12-bit RGB format)
-
-### Experimental File
-- **[a08a.asm](160x200x16%20graphics%20mode/a08a.asm)** - Planar testing variant
-  - Tests planar fill patterns in each 4KB bank
-  - Uses AND/OR method to preserve standby bit
-  - For diagnostic purposes (hardware testing)
+  - Correct Register 0x67 value (0x18)
+  - Proper palette loading (0x40–0x5F, 9-bit RGB)
+  - Random color palette (512 possible colors)
 
 ---
 
@@ -249,11 +179,11 @@ mov dx, 200             ; 200 rows
 
 ✅ **PC1 Hardware Detection** - FFFF:000D signature check (0xFE44)  
 ✅ **BIOS Mode 4 Initialization** - CGA baseline setup via INT 10h  
-✅ **Port 0x3D8 Mode Control** - Three-step sequence confirmed against ACV-1030  
-✅ **Port 0x3D9 Border Color** - Correctly sets border to palette entry 0  
+✅ **Port 0xD8 Mode Control** - Initialization sequence confirmed  
+✅ **Port 0xD9 Border Color** - Correctly sets border to palette entry 0  
 ✅ **Register 0x65 Monitor Control** - 200 lines, PAL, CRT, DRAM settings  
-✅ **Register 0x67 Configuration** - Planar merge ON, Page mode OFF, centering 24  
-✅ **Palette Registers 0x40–0x5F** - 12-bit RGB format, auto-increment via 0x3DE  
+✅ **Register 0x67 Configuration** - Planar merge OFF, Page mode OFF, centering  
+✅ **Palette Registers 0x40–0x5F** - 9-bit RGB format, auto-increment via 0xDE  
 ✅ **I/O Delay Timing** - `jmp short $+2` inserted after all register writes  
 ✅ **Binary-to-Hex Conversions** - Manual verification of all register values  
 
@@ -262,11 +192,11 @@ mov dx, 200             ; 200 rows
 ## Outstanding Issues / Next Steps
 
 ### Primary Testing
-- [ ] **Compile a08.asm with NASM** → `nasm a08.asm -o a08.com`
-- [ ] **Test on PC1 hardware** → Run a08.com and observe display
+- [ ] **Compile Colorbars.asm with NASM** → `nasm Colorbars.asm -o Colorbars.com`
+- [ ] **Test on PC1 hardware** → Run Colorbars.com and observe display
 - [ ] **Verify output:**
   - [ ] 16 vertical color columns (not overlapping bars)
-  - [ ] Proper rainbow palette (not CGA defaults)
+  - [ ] Proper random palette (not CGA defaults)
   - [ ] 160×200 resolution (wider pixels than 320×200)
   - [ ] Stable display (no noise/artifacts)
 
@@ -274,10 +204,10 @@ mov dx, 200             ; 200 rows
 - If **still CGA colors:** Check if palette writes reaching 0x40–0x5F correctly
 - If **overlapping bars persist:** Bit 6 (Register 0x67) may need different state
 - If **display blank:** Check Register 0x65 bit 3 (PAL/NTSC) or timing parameters
-- If **wrong resolution:** Verify Mode Control Register (0x3D8) Bit 6 = 1
+- If **wrong resolution:** Verify Mode Control Register (0xD8) Bit 6 = 1
 
 ### Optional Enhancements
-- [ ] Random color selection from 12-bit palette (4096 colors available)
+- [ ] Random color selection from 9-bit palette (512 colors available)
 - [ ] Text overlay on graphics mode
 - [ ] Mouse/light pen support
 - [ ] VGA/EGA compatibility testing
@@ -304,23 +234,21 @@ mov dx, 200             ; 200 rows
    - PC1 only has 16KB DRAM
    - Must stay OFF (0) for correct display
 
-2. **Register 0x67 Bit 7 (Planar Merge)** is essential for 16-color graphics
-   - Enables linear VRAM addressing
-   - Removes CGA-style horizontal pixel split
-   - Must stay ON (1) for draw routine to work
+2. **Register 0x67 Bit 7 (Planar Merge)** should be OFF for this mode
+   - Ensures correct addressing for 16-color graphics
+   - Must stay OFF (0) for draw routine to work
 
-3. **Port 0x3D8 Bit 6** is the 16-COLOR ENABLE, not "Mode Unlock"
+3. **Port 0xD8 Bit 6** is the 16-COLOR ENABLE
    - Must be set to 1 for 160×200×16 mode
-   - Both 0x4A and 0x42 have Bit 6 = 1 ✓
+   - 0x4A has Bit 6 = 1 ✓
 
-4. **Three-step Mode Sequence** prevents display artifacts
-   - Unlock (0x4A, video ON) → Set (0x42, video OFF) → Finalize (0x4A, video ON)
-   - Video must be disabled during mode transition
-   - Re-enable at end to complete initialization
+4. **Initialization Sequence** prevents display artifacts
+   - Set registers and mode in correct order
+   - Video must be enabled at end to complete initialization
 
-5. **Palette Format is 12-bit RGB, not 3-3-3**
-   - Even register: Red (4 bits, 0–15)
-   - Odd register: Green (4 bits, 0–15) + Blue (4 bits, 0–15)
+5. **Palette Format is 9-bit RGB**
+   - Byte 1: Red (3 bits, 0–7)
+   - Byte 2: Green (3 bits, 0–7) + Blue (3 bits, 0–7)
    - Each color uses exactly 2 bytes (16 colors × 2 = 32 bytes total)
 
 ---
@@ -333,6 +261,6 @@ mov dx, 200             ; 200 rows
 
 ---
 
-**Last Updated:** January 7, 2026  
+**Last Updated:** January 2026  
 **Current Code Status:** Ready for hardware testing  
 **All Critical Fixes:** ✅ Implemented and verified

@@ -16,6 +16,7 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC (Liquid Crystal Display C
 | **VRAM** | 16KB DRAM |
 | **Display** | Composite RGB SCART monitor (PAL standard) |
 | **Target Resolution** | 160×200 pixels, 16 colors |
+| **Video Memory Segment** | 0xB000 |
 
 ## Features
 
@@ -31,36 +32,38 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC (Liquid Crystal Display C
 ### Compilation
 
 ```bash
-nasm -f bin PC1Color.asm -o PC1Color.com
+nasm -f bin Colorbars.asm -o Colorbars.com
 ```
 
 ### Running on PC1
 
-1. Transfer `PC1Color.com` to your PC1 floppy disk
+1. Transfer `Colorbars.com` to your PC1 floppy disk
 2. Boot the PC1 with DOS
-3. Run the program: `PC1COLOR.COM`
+3. Run the program: `COLORBARS.COM`
 4. Press **ESC** to exit and return to text mode
 
 ## Register Reference
 
-### Port 0x3D8 - Mode Control Register
+### Port 0xD8 - Mode Control Register
 
 | Bit | Function | Value |
 |-----|----------|-------|
-| 0 | Text/Graphics column width | 0 (40-col) |
+| 0 | Text mode column width | 0 (40-col) |
 | 1 | Graphics mode enable | 1 |
 | 2 | Video signal type | 0 (color) |
 | 3 | Video enable | 1 |
-| 4 | Resolution select | 0 |
-| 5 | Blink enable | 0 |
+| 4 | High-res graphics | 0 |
+| 5 | Blink/Background | 0 |
 | **6** | **16-color mode unlock** | **1** |
 | 7 | Standby mode | 0 |
 
 **Initialization Sequence:**
 ```
-Step 1: Write 0x4A (unlock + video ON)
-Step 2: Write 0x42 (set mode + video OFF)
-Step 3: Write 0x4A (finalize + video ON)
+1. Set register 0x67 to 0x18 via ports 0xDD (address) and 0xDE (data)
+2. Set register 0x65 to 0x09 via ports 0xDD/0xDE
+3. Write 0x4A to port 0xD8 (enable 16-color mode)
+4. Set border color to black via port 0xD9
+5. Write palette: 0x40 to 0xDD, 32 bytes to 0xDE, then 0x80 to 0xDD
 ```
 
 ### Register 0x65 - Monitor Control
@@ -69,34 +72,41 @@ Step 3: Write 0x4A (finalize + video ON)
 - **Bit 3:** TV standard (1 = PAL/SECAM)
 - **Bit 4:** Monitor type (0 = Color)
 - **Bit 5:** CRT/LCD mode (0 = CRT)
+- **Bit 6:** RAM type (0 = DRAM)
+- **Bit 7:** Input device (0 = none)
 
-**Value:** 0x09 (200 lines, PAL, CRT, DRAM)
+**Value:** 0x09 (200 lines, PAL, color, CRT, DRAM)
 
 ### Register 0x67 - Configuration Mode
 
-- **Bit 7:** Planar memory merge (1 = enabled)
-- **Bit 6:** Page mode (0 = disabled, required for PC1's 16KB DRAM)
-- **Bits 0–2:** Horizontal centering offset
+- **Bit 7:** Planar memory merge (0 = disabled, required for PC1)
+- **Bit 6:** Page mode (0 = disabled)
+- **Bits 4–5:** Display timing/centering (recommended for PC1)
+- **Bits 0–2:** Horizontal centering offset (default)
 
-**Value:** 0x98 (Planar ON, Page mode OFF, centering = 24)
+**Value:** 0x18 (Planar OFF, centering, page mode OFF)
 
 ### Registers 0x40–0x5F - Color Palette
 
 16 color palette entries, 2 bytes each:
-- **Even register:** Red intensity (bits 0–3)
-- **Odd register:** Green (bits 4–7), Blue (bits 0–3)
-- **Format:** 12-bit RGB (4 bits per channel)
+- **Byte 1:** Red intensity (bits 0–2)
+- **Byte 2:** Green (bits 4–6), Blue (bits 0–2)
+- **Format:** 9-bit RGB (3 bits per channel, 512 colors)
+
+**Palette Write Process:**
+1. Write 0x40 to port 0xDD (enable palette write)
+2. Output 32 bytes (16 colors × 2 bytes) to port 0xDE
+3. Write 0x80 to port 0xDD (disable palette write)
 
 ## Memory Layout
 
-Video RAM is organized in four 4KB planes (planar addressing):
+Video RAM is organized in two 8KB banks at segment 0xB000 (not 0xB800):
 
 ```
-Plane 0 (bit 0): 0xB800:0000–0xB800:3FFF
-Plane 1 (bit 1): 0xB800:4000–0xB800:7FFF
-Plane 2 (bit 2): 0xB800:8000–0xB800:BFFF
-Plane 3 (bit 3): 0xB800:C000–0xB800:FFFF
+Even rows:  0xB000:0000–0xB000:1FFF
+Odd rows:   0xB000:2000–0xB000:3FFF
 ```
+Each byte holds two pixels (packed nibbles).
 
 Each plane holds one bit of the 4-bit color value.
 
