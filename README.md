@@ -1,6 +1,6 @@
 # Olivetti Prodest PC1 - Hidden 160×200×16 Graphics Mode
 
-Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom palette support.
+Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom 512 color palette.
 
 ## Overview
 
