@@ -1,6 +1,6 @@
 # Olivetti Prodest PC1 - Hidden 160×200×16 Graphics Mode
 
-Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom palette support.
+Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom 512 color palette.
 
 ## Overview
 
@@ -79,12 +79,12 @@ nasm -f bin Colorbars.asm -o Colorbars.com
 
 ### Register 0x67 - Configuration Mode
 
-- **Bit 7:** Planar memory merge (0 = disabled, required for PC1)
-- **Bit 6:** Page mode (0 = disabled)
-- **Bits 4–5:** Display timing/centering (recommended for PC1)
+- **Bit 7:** 16-bit bus mode (0 = 8-bit bus, MUST be 0 on PC1!)
+- **Bit 6:** 4-page video RAM (0 = disabled)
+- **Bits 3–4:** Display timing/centering (recommended for PC1)
 - **Bits 0–2:** Horizontal centering offset (default)
 
-**Value:** 0x18 (Planar OFF, centering, page mode OFF)
+**Value:** 0x18 (8-bit bus, no paging, centering=24)
 
 ### Registers 0x40–0x5F - Color Palette
 

@@ -34,7 +34,7 @@
 | Register | Address | Purpose | Current Value | Notes |
 |----------|---------|---------|----------------|-------|
 | Monitor Control | 0x65 | Vertical lines, TV standard, RAM type, CRT/LCD | **0x09** | 200 lines, PAL, CRT, DRAM |
-| Configuration | 0x67 | Planar merge, page mode, centering | **0x18** | Planar OFF, Page mode OFF, centering (recommended for PC1) |
+| Configuration | 0x67 | 16-bit bus, page mode, centering | **0x18** | 8-bit bus, Page mode OFF, centering (required for PC1) |
 | Palette Base | 0x40–0x5F | 16 color entries (2 bytes each) | Custom RGB | 9-bit RGB format (3 bits per channel, 512 colors) |
 
 ---
@@ -90,7 +90,7 @@
 | 3–4 | CENTER[4:3] | Horizontal centering high | **11** | Recommended for PC1 |
 | 5 | LCD Period | LCD control signal timing | **0** | 0=CRT timing |
 | 6 | Page Mode | 4-page VRAM mode | **0** | OFF |
-| 7 | Planar merge | Planar memory merge | **0** | OFF |
+| 7 | 16-bit Bus | 16-bit bus mode | **0** | OFF - MUST be 0 on PC1's 8-bit bus! |
 
 **Current Value:** 0x18 (00011000b)
 
@@ -137,7 +137,7 @@ out 0xDD, al            ; Register Bank Address
 - Odd rows:   0xB000:2000–0xB000:3FFF
 - Each byte holds two pixels (packed nibbles)
 
-**Current Code:** Uses 0xB000 segment, planar merge OFF
+**Current Code:** Uses 0xB000 segment, 8-bit bus mode
 
 ---
 
@@ -182,7 +182,7 @@ mov dx, 200             ; 200 rows
 ✅ **Port 0xD8 Mode Control** - Initialization sequence confirmed  
 ✅ **Port 0xD9 Border Color** - Correctly sets border to palette entry 0  
 ✅ **Register 0x65 Monitor Control** - 200 lines, PAL, CRT, DRAM settings  
-✅ **Register 0x67 Configuration** - Planar merge OFF, Page mode OFF, centering  
+✅ **Register 0x67 Configuration** - 8-bit bus mode, Page mode OFF, centering  
 ✅ **Palette Registers 0x40–0x5F** - 9-bit RGB format, auto-increment via 0xDE  
 ✅ **I/O Delay Timing** - `jmp short $+2` inserted after all register writes  
 ✅ **Binary-to-Hex Conversions** - Manual verification of all register values  
@@ -234,9 +234,10 @@ mov dx, 200             ; 200 rows
    - PC1 only has 16KB DRAM
    - Must stay OFF (0) for correct display
 
-2. **Register 0x67 Bit 7 (Planar Merge)** should be OFF for this mode
-   - Ensures correct addressing for 16-color graphics
-   - Must stay OFF (0) for draw routine to work
+2. **Register 0x67 Bit 7 (16-bit Bus Mode)** must be OFF on PC1
+   - If set on 8-bit bus, controller can only access odd bytes of VRAM
+   - PC1 has 8-bit bus, not 16-bit
+   - Must stay OFF (0) for correct display
 
 3. **Port 0xD8 Bit 6** is the 16-COLOR ENABLE
    - Must be set to 1 for 160×200×16 mode

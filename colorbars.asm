@@ -1,4 +1,4 @@
-colors; ============================================================================
+; ============================================================================
 ; COLORBARS.ASM (v59) - 16 Color Bar Demo for Olivetti Prodest PC1
 ; Hidden 160x200x16 Graphics Mode
 ; Written for NASM - NEC V40 (80186 compatible)
@@ -149,7 +149,7 @@ main:
 ; ============================================================================
 ; enable_graphics_mode - Olivetti Prodest PC1 hidden 160x200x16 graphics mode
 ; Configures Yamaha V6355D for hidden 160x200x16 graphics mode:
-; - Disables planar merge (standard CGA split memory, PC1 VRAM at B000h)
+; - Sets 8-bit bus mode (PC1 has 8-bit bus, NOT 16-bit!)
 ; - Sets PAL timing (50Hz, 200 lines)
 ; - Enables 16-color mode (planar logic, custom palette)
 ; - Sets border color to black
@@ -163,22 +163,20 @@ enable_graphics_mode:
     mov ax, 0x0004
     int 0x10
     
-    ; --- SET CENTERING, BUS WIDTH & PLANAR (Register 0x67) ---
+    ; --- CONFIGURATION MODE REGISTER (Register 0x67) ---
     ; Sets V6355D register 0x67 to 0x18:
-    ; Bit 7: [0] Planar merge OFF (standard CGA split memory - Interleaved) PC1 does NOT support Planar merge ON
-    ;            Standard CGA splits horizontal pixels: even at B800:0000, odd at B800:2000
-    ;            On the PC1: even at B000:0000, odd at B000:2000 (VRAM is mapped to B000h)
-    ; Bit 6: [0] Page mode OFF (PC1's only have 16KB DRAM)
+    ; Bit 7: [0] 16-bit bus mode OFF - MUST be 0 on PC1's 8-bit bus!
+    ;            If set on 8-bit bus, controller can only access odd bytes of VRAM.
+    ; Bit 6: [0] 4-page video RAM OFF (PC1's only have 16KB DRAM)
     ; Bit 5: [0] LCD control period (CRT timing)
     ; Bit 4: [1] Display timing/centering (see datasheet)
     ; Bit 3: [1] Display timing/centering (see datasheet)
     ; Bits 0-2: [000] Horizontal centering offset (default) Range: 0-31 (5 bits total)
     ; Binary: 00011000b (0x18)
-    ; This disables planar merge and page mode, sets recommended centering/timing for PC1.
     mov al, 0x67
     out PORT_REG_ADDR, al
     jmp short $+2
-    mov al, 0x18            ; Planar merge OFF, centering, page mode OFF
+    mov al, 0x18            ; 8-bit bus, no paging, h-position=24
     out PORT_REG_DATA, al
     jmp short $+2
     
@@ -261,23 +259,21 @@ disable_graphics_mode:
     push ax
     push dx
     
-    ; --- RESET CENTERING, BUS WIDTH & PLANAR (Register 0x67) ---
+    ; --- RESET CONFIGURATION MODE REGISTER (Register 0x67) ---
     ; Sets V6355D register 0x67 to 0x00:
-    ; Bit 7: [0] Planar merge DISABLED (standard CGA split memory)
-    ; Bit 6: [0] Page mode DISABLED (safe for PC1's 16KB DRAM)
+    ; Bit 7: [0] 16-bit bus mode OFF (8-bit bus for PC1)
+    ; Bit 6: [0] 4-page video RAM OFF
     ; Bit 5: [0] LCD control period (CRT timing)
     ; Bit 4: [0] Display timing (default)
     ; Bit 3: [0] Display timing (default)
     ; Bits 0-2: [000] Horizontal centering offset (default)
     ; Binary: 00000000b
-    ; This restores standard CGA memory layout and disables all extended features.
- 
     mov al, 0x67            ; Select register 0x67
     out PORT_REG_ADDR, al   ; Register Bank Address Port
-    jmp short $+2           ; I/O delay (give chip time to latch register index)
-    mov al, 0x00            ; Disable planar merge, reset centering
+    jmp short $+2           ; I/O delay
+    mov al, 0x00            ; Reset to defaults
     out PORT_REG_DATA, al   ; Register Bank Data Port
-    jmp short $+2           ; I/O delay (give chip time to apply settings)
+    jmp short $+2           ; I/O delay
     
     ; --- RESET MONITOR CONTROL REGISTER (Register 0x65) ---
     ; Value: 09h (00001001b) - CORRECTED for 200 lines (bits 0-1 = 01b, not 00b)
