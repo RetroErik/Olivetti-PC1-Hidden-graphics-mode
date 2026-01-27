@@ -1,6 +1,6 @@
 # Olivetti Prodest PC1 - 160×200×16 Graphics Mode Development
 
-**Project Goal:** Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom palette support.
+**Project Goal:** Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with custom palette support
 
 ---
 
@@ -186,19 +186,25 @@ mov dx, 200             ; 200 rows
 ✅ **Palette Registers 0x40–0x5F** - 9-bit RGB format, auto-increment via 0xDE  
 ✅ **I/O Delay Timing** - `jmp short $+2` inserted after all register writes  
 ✅ **Binary-to-Hex Conversions** - Manual verification of all register values  
+✅ **CGA Palette Restore** - Both programs reset palette to CGA defaults on exit  
+✅ **320→160 Downsampling** - Automatic pixel decimation for wider images  
 
 ---
 
 ## Outstanding Issues / Next Steps
 
-### Primary Testing
-- [ ] **Compile Colorbars.asm with NASM** → `nasm Colorbars.asm -o Colorbars.com`
-- [ ] **Test on PC1 hardware** → Run Colorbars.com and observe display
+### ✅ Completed
+- [x] **Compile colorbar.asm with NASM** → `nasm -f bin colorbar.asm -o colorbar.com`
+- [x] **CGA palette reset on exit** → Both programs restore default CGA palette
+
+### Primary Testing (Hardware)
+- [ ] **Test on PC1 hardware** → Run colorbar.com
 - [ ] **Verify output:**
   - [ ] 16 vertical color columns (not overlapping bars)
   - [ ] Proper random palette (not CGA defaults)
   - [ ] 160×200 resolution (wider pixels than 320×200)
   - [ ] Stable display (no noise/artifacts)
+  - [ ] Clean exit to text mode with correct CGA colors
 
 ### Diagnostic Tests (if issues found)
 - If **still CGA colors:** Check if palette writes reaching 0x40–0x5F correctly
@@ -207,10 +213,18 @@ mov dx, 200             ; 200 rows
 - If **wrong resolution:** Verify Mode Control Register (0xD8) Bit 6 = 1
 
 ### Optional Enhancements
-- [ ] Random color selection from 9-bit palette (512 colors available)
+- [ ] Demo scene effects (gradient.asm, acid88.asm)
 - [ ] Text overlay on graphics mode
 - [ ] Mouse/light pen support
-- [ ] VGA/EGA compatibility testing
+
+---
+
+## Programs in This Project
+
+| Program | Description | Status |
+|---------|-------------|--------|
+| **colorbar.com** | Interactive demo with color bars, circles, gradients, test patterns | ✅ Complete |
+
 
 ---
 
@@ -249,19 +263,26 @@ mov dx, 200             ; 200 rows
 
 5. **Palette Format is 9-bit RGB**
    - Byte 1: Red (3 bits, 0–7)
-   - Byte 2: Green (3 bits, 0–7) + Blue (3 bits, 0–7)
+   - Byte 2: Green (3 bits, bits 4-6) + Blue (3 bits, bits 0–2)
    - Each color uses exactly 2 bytes (16 colors × 2 = 32 bytes total)
+   - Total palette: 512 possible colors
+
+6. **CGA Palette Must Be Restored on Exit**
+   - The hidden mode uses custom palette registers
+   - Text mode expects standard CGA colors
+   - Both programs now reset palette to CGA defaults before exiting
 
 ---
 
 ## Contact & Attribution
 
 - **Developer:** Dag Erik Hagesæter (Retro Erik)
-- **Documentation:** John Elliott, Peritel.com reverse-engineering
+- **AI Assistance:** GitHub Copilot, Claude (Anthropic)
+- **Documentation:** John Elliott
 - **Original Discovery:** Simone Riminucci (unlocking 160×200×16 mode)
 
 ---
 
 **Last Updated:** January 2026  
-**Current Code Status:** Ready for hardware testing  
+**Current Code Status:** ✅ Ready for hardware testing  
 **All Critical Fixes:** ✅ Implemented and verified
