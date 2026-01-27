@@ -15,34 +15,36 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC (Liquid Crystal Display C
 | **Video Chip** | Yamaha V6355D LCDC |
 | **VRAM** | 16KB DRAM |
 | **Display** | Composite RGB SCART monitor (PAL standard) |
-| **Target Resolution** | 160×200 pixels, 16 colors |
+| **Target Resolution** | 160×200 pixels, 16 colors from 512-color palette |
 | **Video Memory Segment** | 0xB000 |
 
-## Features
+## Programs Included
 
-- ✅ Unlocks hidden 16-color mode via Port 0x3D8
-- ✅ Configures Yamaha V6355D registers (0x65, 0x67, 0x40–0x5F)
-- ✅ Custom palette support (12-bit RGB format)
-- ✅ Hardware detection (PC1 signature verification)
-- ✅ NASM-compatible assembly code
-- ✅ Compiles to .COM executable
+### COLORBAR.COM - Graphics Mode Demo
+Interactive demonstration of the hidden 160×200×16 graphics mode.
+
+**Controls:**
+| Key | Function |
+|-----|----------|
+| **SPACE** | Randomize palette (512 colors) |
+| **W** | Reset to CGA palette with 16 color bars |
+| **A** | Cycle border color (0-15) |
+| **Q** | Draw random colored circle |
+| **D** | Gradient dither demo (Red→Green→Blue→Gray) |
+| **T** | Draw test pattern (grid, color boxes, gradient) |
+| **0** | Set bar width to 10 pixels (fills screen) |
+| **1-9** | Set bar width to 1-9 pixels |
+| **ESC** | Exit to DOS |
+| **/?** | Show help |
 
 ## Getting Started
 
 ### Compilation
 
 ```bash
-nasm -f bin Colorbars.asm -o Colorbars.com
+nasm -f bin colorbar.asm -o colorbar.com
 ```
-
-### Running on PC1
-
-1. Transfer `Colorbars.com` to your PC1 floppy disk
-2. Boot the PC1 with DOS
-3. Run the program: `COLORBARS.COM`
-4. Press **ESC** to exit and return to text mode
-
-## Register Reference
+## Technical Reference
 
 ### Port 0xD8 - Mode Control Register
 
@@ -57,41 +59,36 @@ nasm -f bin Colorbars.asm -o Colorbars.com
 | **6** | **16-color mode unlock** | **1** |
 | 7 | Standby mode | 0 |
 
-**Initialization Sequence:**
+**Value 0x4A** enables the hidden 16-color mode.
+
+### Initialization Sequence
 ```
-1. Set register 0x67 to 0x18 via ports 0xDD (address) and 0xDE (data)
-2. Set register 0x65 to 0x09 via ports 0xDD/0xDE
-3. Write 0x4A to port 0xD8 (enable 16-color mode)
-4. Set border color to black via port 0xD9
-5. Write palette: 0x40 to 0xDD, 32 bytes to 0xDE, then 0x80 to 0xDD
+1. INT 10h, AX=0004h  (Set CGA Mode 4 as baseline)
+2. Set register 0x67 to 0x18 via ports 0xDD/0xDE (8-bit bus mode)
+3. Set register 0x65 to 0x09 via ports 0xDD/0xDE (200 lines, PAL)
+4. Write 0x4A to port 0xD8 (enable 16-color mode)
+5. Set border color via port 0xD9
+6. Write palette: 0x40 to 0xDD, 32 bytes to 0xDE, then 0x80 to 0xDD
 ```
 
-### Register 0x65 - Monitor Control
+### Register 0x65 - Monitor Control (Value: 0x09)
 
 - **Bits 0–1:** Vertical lines (01 = 200 lines)
-- **Bit 3:** TV standard (1 = PAL/SECAM)
+- **Bit 3:** TV standard (1 = PAL/SECAM, 50Hz)
 - **Bit 4:** Monitor type (0 = Color)
-- **Bit 5:** CRT/LCD mode (0 = CRT)
-- **Bit 6:** RAM type (0 = DRAM)
-- **Bit 7:** Input device (0 = none)
 
-**Value:** 0x09 (200 lines, PAL, color, CRT, DRAM)
+### Register 0x67 - Configuration Mode (Value: 0x18)
 
-### Register 0x67 - Configuration Mode
-
-- **Bit 7:** 16-bit bus mode (0 = 8-bit bus, MUST be 0 on PC1!)
+- **Bit 7:** 16-bit bus mode (0 = 8-bit bus, **MUST be 0 on PC1!**)
 - **Bit 6:** 4-page video RAM (0 = disabled)
-- **Bits 3–4:** Display timing/centering (recommended for PC1)
-- **Bits 0–2:** Horizontal centering offset (default)
+- **Bits 3–4:** Display timing/centering
 
-**Value:** 0x18 (8-bit bus, no paging, centering=24)
+### Color Palette (Registers 0x40–0x5F)
 
-### Registers 0x40–0x5F - Color Palette
-
-16 color palette entries, 2 bytes each:
-- **Byte 1:** Red intensity (bits 0–2)
-- **Byte 2:** Green (bits 4–6), Blue (bits 0–2)
-- **Format:** 9-bit RGB (3 bits per channel, 512 colors)
+16 color entries, 2 bytes each:
+- **Byte 1:** Red intensity (bits 0–2, values 0-7)
+- **Byte 2:** Green (bits 4–6) | Blue (bits 0–2)
+- **Format:** 9-bit RGB (3 bits per channel = 512 colors)
 
 **Palette Write Process:**
 1. Write 0x40 to port 0xDD (enable palette write)
@@ -100,27 +97,30 @@ nasm -f bin Colorbars.asm -o Colorbars.com
 
 ## Memory Layout
 
-Video RAM is organized in two 8KB banks at segment 0xB000 (not 0xB800):
+Video RAM at segment 0xB000 (not 0xB800 like standard CGA):
 
 ```
-Even rows:  0xB000:0000–0xB000:1FFF
-Odd rows:   0xB000:2000–0xB000:3FFF
+Even rows:  0xB000:0000–0xB000:1FFF (8KB)
+Odd rows:   0xB000:2000–0xB000:3FFF (8KB)
 ```
-Each byte holds two pixels (packed nibbles).
 
-Each plane holds one bit of the 4-bit color value.
+Each byte holds two pixels (packed nibbles: high nibble = left pixel, low nibble = right pixel).
+
+Row offset calculation:
+- Even row Y: `offset = (Y / 2) * 80`
+- Odd row Y: `offset = 0x2000 + (Y / 2) * 80`
 
 ## Documentation
 
-See `DEVELOPMENT_SUMMARY.md` for detailed technical specifications and testing procedures.
+See [DEVELOPMENT_SUMMARY.md](DEVELOPMENT_SUMMARY.md) for detailed technical specifications.
 
 ## Credits
 
 - **Author:** Dag Erik Hagesæter (Retro Erik)
 - **Special Thanks:**
-  - Simone Riminucci - Showed that this hidden mode was possible
-  - John Elliott - Extensive documentation gathering
-  - VS Code & GitHub Copilot - Development tools
+  - Simone Riminucci - Demonstrated that this hidden mode was possible
+  - John Elliott - Extensive V6355D documentation
+  - GitHub Copilot & Claude - AI-assisted development
 
 ## License
 
@@ -136,10 +136,10 @@ You must:
 - Include a copy of the license
 
 You cannot:
-- Use this code for commercial purposes (selling, bundling with commercial software, etc.)
+- Use this code for commercial purposes
 - Remove attribution or claim the work as your own
 
-For full license details, see the `LICENSE` file.
+For full license details, see the [LICENSE](LICENSE) file.
 
 ## Contributing
 

@@ -1,16 +1,18 @@
 ; ============================================================================
-; COLORBAR.ASM (v0.59) - 16 Color Bar Demo for Olivetti Prodest PC1
+; COLORBAR.ASM (v 1.0) - Hidden graphics mode demo for Olivetti Prodest PC1
 ; Hidden 160x200x16 Graphics Mode
 ; Written for NASM - NEC V40 (80186 compatible)
-; By Retro Erik - 2026
+; By Retro Erik - 2026 using VS Code with Co-Pilot
 ;
 ; Controls:
 ;   SPACE - Cycle palette colors (random from 512-color palette)
+;   W     - Reset to startup screen (CGA palette, 16 bars)
 ;   A     - Cycle border color (0-15)   
-;   Q     - Draw random colored circle
-;   0     - Set bar width to 10 pixels (default, fills screen)
-;   T     - Draw test pattern (circle + crosshair for measuring)
-;   1-9   - Set bar width to 2,4,6,8,10,12,14,16,18 pixels (Not working)
+;   Q     - Draw random colored circle(ish)
+;   D     - Gradient dither demo (cycles Red→Green→Blue→Gray on each press)
+;   T     - Draw test pattern (10x10 grid, 8 color boxes, gradient)
+;   0     - Set bar width to 10 pixels (fills entire screen width)
+;   1-9   - Set bar width to 1-9 pixels (16 bars from left edge)
 ;   ESC   - Exit to DOS in text mode
 ; ============================================================================
 
@@ -20,126 +22,163 @@
 ; ============================================================================
 ; Constants
 ; ============================================================================
-VIDEO_SEG       equ 0xB000      ; Video memory segment (B000, not B800!)
 
-; Note: 0xDD and 0x3DD are aliases on PC1 hardware
-PORT_REG_ADDR   equ 0xDD        ; 6355 Register Bank Address Port
-PORT_REG_DATA   equ 0xDE        ; 6355 Register Bank Data Port  
-PORT_MODE       equ 0xD8        ; CGA Mode Control Port
-PORT_COLOR      equ 0xD9        ; CGA Color Select Port
+; --- Video Memory ---
+VIDEO_SEG       equ 0xB000      ; PC1 video RAM segment (not B800 like standard CGA!)
 
-PALETTE_BASE    equ 0x40        ; Palette starts at register 0x40
+; --- Yamaha V6355D I/O Ports ---
+; Note: 0xDD/0xDE and 0x3DD/0x3DE are aliases on PC1 hardware
+PORT_REG_ADDR   equ 0xDD        ; Register Bank Address Port (select register 0x00-0x7F)
+PORT_REG_DATA   equ 0xDE        ; Register Bank Data Port (read/write selected register)
+PORT_MODE       equ 0xD8        ; Mode Control Register (CGA compatible + extensions)
+PORT_COLOR      equ 0xD9        ; Color Select Register (border color, palette index 0-15)
 
-SCREEN_WIDTH    equ 160         ; Pixels
-SCREEN_HEIGHT   equ 200         ; Pixels
-BYTES_PER_ROW   equ 80          ; 160 pixels / 2 (packed nibbles)
+; --- Screen Dimensions (160x200x16 hidden mode) ---
+SCREEN_WIDTH    equ 160         ; Horizontal resolution in pixels
+SCREEN_HEIGHT   equ 200         ; Vertical resolution in pixels
+BYTES_PER_ROW   equ 80          ; 160 pixels / 2 pixels per byte (packed nibbles)
 
-KEY_SPACE       equ 0x20
-KEY_ESC         equ 0x1B
-KEY_Q           equ 'q'
-KEY_Q_UPPER     equ 'Q'
+; --- Keyboard ASCII Codes ---
+KEY_ESC         equ 0x1B        ; Escape key (exit program)
+KEY_SPACE       equ 0x20        ; Space bar (randomize palette)
 
 ; ============================================================================
 ; Main Program Entry Point
 ; ============================================================================
 main:
+    ; Check for /? or /h command line argument
+    call check_help_arg
+    jc .show_help               ; CF set = show help and exit
+    jmp .start_program
+    
+.show_help:
+    call print_help
+    mov ax, 0x4C00              ; Exit to DOS
+    int 0x21
+    
+.start_program:
+    ; Save original video mode
+    mov ah, 0x0F
+    int 0x10                    ; Get current video mode
+    mov [orig_video_mode], al   ; Save mode in AL
+    
+    ; Save original text attribute (read from screen position 0,0)
+    mov ah, 0x08
+    mov bh, 0                   ; Page 0
+    int 0x10                    ; Get char+attr at cursor
+    mov [orig_text_attr], ah    ; Save attribute in AH
+    
     ; Initialize random seed from timer
     call init_random
     
     ; Enable the hidden 160x200x16 graphics mode
     call enable_graphics_mode
     
-    ; Clear video memory to avoid garbage
-    call clear_screen
-    
-    ; Generate initial random palette
-    call generate_random_palette
-    
-    ; Set the palette
-    call set_palette
-    
-    ; Draw the 16 color bars
-    call draw_color_bars
+    ; Initialize screen with CGA colors and 16 bars
+    call reset_screen
     
 .main_loop:
     ; Wait for keypress (AH = scan code, AL = ASCII)
     call wait_key
     
-    ; Check for ESC
+    ; Convert lowercase to uppercase for easier comparison
+    cmp al, 'a'
+    jb .check_keys
+    cmp al, 'z'
+    ja .check_keys
+    sub al, 32              ; Convert to uppercase
+    
+.check_keys:
+    ; ESC - Exit program
     cmp al, KEY_ESC
     je .exit_program
     
-    ; Check for SPACE - cycle colors
+    ; SPACE - Randomize palette
     cmp al, KEY_SPACE
     jne .not_space
     call generate_random_palette
     call set_palette
     jmp .main_loop
-    
 .not_space:
-    ; Check for A - cycle border color
-    cmp al, 'a'
-    je .do_border
+    
+    ; W - Reset to startup screen
+    cmp al, 'W'
+    jne .not_w
+    call reset_screen
+    jmp .main_loop
+.not_w:
+    
+    ; A - Cycle border color
     cmp al, 'A'
-    je .do_border
-    jmp .not_border
-.do_border:
+    jne .not_a
     call cycle_border
     jmp .main_loop
+.not_a:
     
-.not_border:
-    ; Check for Q - draw circle
-    cmp al, KEY_Q
-    je .do_circle
-    cmp al, KEY_Q_UPPER
-    je .do_circle
-    jmp .not_q
-.do_circle:
+    ; Q - Draw random circle
+    cmp al, 'Q'
+    jne .not_q
     call draw_circle
     jmp .main_loop
 .not_q:
 
-    ; Check for T - draw test pattern (circle + crosshair for measuring)
-    cmp al, 't'
-    je .do_test
+    ; T - Draw test pattern
     cmp al, 'T'
-    je .do_test
-    jmp .not_t
-.do_test:
+    jne .not_t
     call draw_test_pattern
     jmp .main_loop
 .not_t:
 
-    ; Check for 0 FIRST (since '0' < '1')
+    ; D - Gradient dither demo (cycles color on each press)
+    cmp al, 'D'
+    jne .not_d
+    call draw_gradient
+    jmp .main_loop
+.not_d:
+
+    ; 0 - Bar width 10 (fills screen)
     cmp al, '0'
     jne .not_zero
     mov byte [bar_width], 10
     call draw_color_bars
     jmp .main_loop
-    
 .not_zero:
-    ; Check for 1-9 (bar width 2,4,6,8,10,12,14,16,18 pixels)
-    ; We multiply by 2 to always get even pixel counts
+    
+    ; 1-9 - Bar width 1-9 pixels
     cmp al, '1'
-    jb .not_digit
+    jb .main_loop
     cmp al, '9'
-    ja .not_digit
-    ; Convert '1'-'9' to 2,4,6,8,10,12,14,16,18
-    sub al, '0'         ; AL = 1-9
-    shl al, 1           ; AL = 2,4,6,8,10,12,14,16,18
+    ja .main_loop
+    sub al, '0'             ; Convert ASCII to number
     mov [bar_width], al
     call draw_color_bars
     jmp .main_loop
     
-.not_digit:
-    jmp .main_loop
-    
 .exit_program:
+    ; Reset palette to CGA defaults before exiting
+    call set_cga_palette
+    call set_palette
+    
     ; Disable graphics mode (return to text mode)
     call disable_graphics_mode
     
-    ; Restore video mode 3 (80x25 text)
-    mov ax, 0x0003
+    ; Restore original video mode
+    mov ah, 0x00
+    mov al, [orig_video_mode]
+    int 0x10
+    
+    ; Clear screen with original text attribute
+    mov ah, 0x06                ; Scroll up function
+    mov al, 0                   ; Clear entire window
+    mov bh, [orig_text_attr]    ; Use original attribute
+    xor cx, cx                  ; Upper left (0,0)
+    mov dx, 0x184F              ; Lower right (24,79)
+    int 0x10
+    
+    ; Set cursor to top-left
+    mov ah, 0x02
+    xor bh, bh                  ; Page 0
+    xor dx, dx                  ; Row 0, Col 0
     int 0x10
     
     ; Exit to DOS
@@ -264,9 +303,7 @@ disable_graphics_mode:
     ; Bit 7: [0] 16-bit bus mode OFF (8-bit bus for PC1)
     ; Bit 6: [0] 4-page video RAM OFF
     ; Bit 5: [0] LCD control period (CRT timing)
-    ; Bit 4: [0] Display timing (default)
-    ; Bit 3: [0] Display timing (default)
-    ; Bits 0-2: [000] Horizontal centering offset (default)
+    ; Bits 0-4: [00000] Horizontal position (default)
     ; Binary: 00000000b
     mov al, 0x67            ; Select register 0x67
     out PORT_REG_ADDR, al   ; Register Bank Address Port
@@ -312,7 +349,7 @@ clear_screen:
     mov ax, VIDEO_SEG
     mov es, ax
     xor di, di
-    mov cx, 8000            ; 16KB = 8000 words
+    mov cx, 8192            ; 16KB = 8192 words (0x4000 bytes)
     xor ax, ax              ; Fill with 0x0000
     cld
     rep stosw
@@ -326,17 +363,16 @@ clear_screen:
 ; ============================================================================
 ; set_palette - Write the 16-color palette to the 6355 chip
 ;   MOV AL, 0x40 / OUT 0xDD, AL   ; Enable palette write
-;   REP OUTSB                      ; Output 32 bytes to port 0xDE
+;   Loop with OUT to port 0xDE    ; Output 32 bytes with I/O delays
 ;   MOV AL, 0x80 / OUT 0xDD, AL   ; Disable palette write
 ;
 ; Palette format: 32 bytes (16 colors × 2 bytes each)
-;   Byte 1: Red intensity (bits 0-3)
-;   Byte 2: Green (bits 4-7) + Blue (bits 0-3)
+;   Byte 1: Red intensity (bits 0-2, values 0-7)
+;   Byte 2: Green (bits 4-6) + Blue (bits 0-2)
 ; ============================================================================
 set_palette:
     push ax
     push cx
-    push dx
     push si
     
     cli                     ; Disable interrupts during palette write
@@ -344,31 +380,38 @@ set_palette:
     ; Enable palette write mode (write 0x40 to port 0xDD)
     mov al, 0x40
     out PORT_REG_ADDR, al
+    jmp short $+2           ; I/O delay
+    jmp short $+2
     
-    ; Write 32 bytes of palette data using REP OUTSB
-    mov dx, 0x3DE           ; Full 16-bit port address for OUTSB
+    ; Write 32 bytes of palette data with I/O delays (PC1 hardware needs this!)
     mov si, palette
     mov cx, 32              ; 16 colors × 2 bytes
-    cld                     ; Clear direction flag
-    rep outsb               ; Output CX bytes from DS:SI to port DX
+    
+.pal_write_loop:
+    lodsb                   ; Load byte from DS:SI into AL, inc SI
+    out PORT_REG_DATA, al   ; Write to port 0xDE
+    jmp short $+2           ; I/O delay
+    loop .pal_write_loop
     
     ; Disable palette write mode (write 0x80 to port 0xDD)
+    jmp short $+2           ; Extra delay before mode change
     mov al, 0x80
     out PORT_REG_ADDR, al
+    jmp short $+2           ; I/O delay
     
     sti                     ; Re-enable interrupts
     
     pop si
-    pop dx
     pop cx
     pop ax
     ret
 
 ; ============================================================================
 ; draw_color_bars - Draw 16 vertical color bars on screen
-; EXACT COPY of working algorithm structure
-; 80 bytes per row, 2 pixels per byte (packed nibbles)
-; Manual even/odd bank handling
+; Uses [bar_width] to set pixel width of each bar (1-10 pixels)
+; Always draws exactly 16 bars, starting from left edge
+; Color 0 = black (matches border)
+; Remaining pixels after 16 bars stay black
 ; ============================================================================
 draw_color_bars:
     push ax
@@ -376,69 +419,99 @@ draw_color_bars:
     push cx
     push dx
     push di
+    push si
     push es
+    
+    ; First clear the screen (fills with black/color 0)
+    call clear_screen
     
     mov ax, VIDEO_SEG
     mov es, ax
     
-    ; Draw all 200 rows
-    xor bx, bx              ; BX = row counter (0-199)
+    ; Calculate total width of all 16 bars
+    mov al, [bar_width]
+    xor ah, ah
+    shl ax, 4               ; AX = bar_width * 16 = total pixels for all bars
+    cmp ax, 160
+    jbe .width_ok
+    mov ax, 160             ; Cap at screen width
+.width_ok:
+    mov [bars_total_width], ax
+    
+    ; Draw all 200 rows using fast byte writes
+    xor si, si              ; SI = row counter (0-199)
     
 .row_loop:
-    ; Calculate offset for this row
-    mov ax, bx
-    test ax, 1
+    ; Calculate base offset for this row
+    ; Even rows: offset = (row/2) * 80
+    ; Odd rows:  offset = 0x2000 + (row/2) * 80
+    mov ax, si
+    shr ax, 1               ; AX = row / 2
+    mov bx, 80
+    mul bx                  ; AX = (row/2) * 80
+    mov di, ax
+    test si, 1              ; Check if odd row
     jz .even_row
-    
-    ; Odd row: 0x2000 + (row/2)*80
-    shr ax, 1
-    mov cx, 80
-    mul cx
-    add ax, 0x2000
-    mov di, ax
-    jmp .draw_row
-    
+    add di, 0x2000          ; Odd rows start at 0x2000
 .even_row:
-    ; Even row: (row/2)*80
-    shr ax, 1
-    mov cx, 80
-    mul cx
-    mov di, ax
     
-.draw_row:
-    ; Draw 16 bars of 5 bytes each
-    mov cl, 0               ; CL = color (0-15)
+    ; For each row, write bytes for the bar area only
+    xor bx, bx              ; BX = pixel position (0-159)
     
-.bar_loop:
-    ; Pack color into both nibbles
-    mov al, cl
-    mov ah, al
-    shl al, 4
-    or al, ah
+.pixel_loop:
+    ; Check if we're past all 16 bars
+    cmp bx, [bars_total_width]
+    jae .row_done           ; Past bar area, rest stays black
     
-    ; Write 5 bytes
-    stosb
-    stosb
-    stosb
-    stosb
-    stosb
+    ; Calculate which color this pixel belongs to
+    mov ax, bx
+    mov cl, [bar_width]
+    xor ch, ch
+    div cl                  ; AL = pixel / bar_width = color index (0-15)
+    mov dl, al              ; DL = left pixel color
     
-    inc cl
-    cmp cl, 16
-    jb .bar_loop
+    ; Get right pixel color (pixel + 1)
+    mov ax, bx
+    inc ax
+    cmp ax, [bars_total_width]
+    jae .right_black        ; Right pixel is past bar area
+    div cl                  ; AL = (pixel+1) / bar_width
+    jmp .combine
     
+.right_black:
+    xor al, al              ; Right pixel is black (color 0)
+    
+.combine:
+    ; DL = left color, AL = right color
+    ; Combine: byte = (left << 4) | right
+    shl dl, 4
+    or dl, al
+    
+    ; Write byte to video memory
+    mov [es:di], dl
+    inc di
+    
+    ; Advance by 2 pixels
+    add bx, 2
+    cmp bx, 160
+    jb .pixel_loop
+    
+.row_done:
     ; Next row
-    inc bx
-    cmp bx, 200
+    inc si
+    cmp si, 200
     jb .row_loop
     
     pop es
+    pop si
     pop di
     pop dx
     pop cx
     pop bx
     pop ax
     ret
+
+bars_total_width: dw 160    ; Total width of all 16 bars in pixels
 
 ; ============================================================================
 ; cycle_border - Cycle the border color 0-15
@@ -460,9 +533,11 @@ cycle_border:
     ret
 
 ; ============================================================================
-; draw_test_pattern - Draw measurement test pattern
-; Draws a 40-pixel radius circle with horizontal/vertical lines through center
-; Makes it easy to count pixels and verify resolution
+; draw_test_pattern - Draw test pattern with grid, color boxes, and gradient
+; - 10x10 white grid (16x20 pixel cells)
+; - 8 bright CGA color boxes (10x40 pixels each, centered)
+; - Black-to-white dither gradient (80x21 pixels, below color boxes)
+;   Uses 8 true grey levels from 512-color palette (R=G=B, 0-7)
 ; ============================================================================
 draw_test_pattern:
     push ax
@@ -470,52 +545,163 @@ draw_test_pattern:
     push cx
     push dx
     push di
+    push si
     push es
+    
+    ; Set up palette with 8 grey levels (0-7) + 8 CGA bright colors (8-15)
+    call setup_test_palette
+    call set_palette
     
     mov ax, VIDEO_SEG
     mov es, ax
     
-    ; Clear screen first
+    ; Clear screen first (black background)
     xor di, di
-    mov cx, 16000           ; 32KB / 2
+    mov cx, 8192            ; 16KB = 8192 words
     xor ax, ax
     rep stosw
     
-    ; Draw white circle (color 15)
-    mov byte [circle_color], 15
-    call draw_circle
+    ; --- Draw 10x10 grid (white lines) ---
+    mov byte [circle_color], 15     ; White (CGA color 15)
     
-    ; Draw horizontal line through center (Y=100)
-    ; From X=0 to X=159, color 14
+    ; Draw 11 horizontal lines at Y = 0, 20, 40, ... 180, 199 (last at bottom edge)
+    xor bx, bx              ; BX = Y position
+.hgrid_loop:
     mov word [circle_x1], 0
     mov word [circle_x2], 159
-    mov byte [circle_color], 14
-    mov ax, 100
+    mov ax, bx
+    call draw_hline_packed
+    add bx, 20              ; Next grid line
+    cmp bx, 200
+    jb .hgrid_loop
+    ; Draw final line at Y=199 (bottom of screen)
+    mov ax, 199
     call draw_hline_packed
     
-    ; Draw vertical line through center (X=80)
-    ; From Y=0 to Y=199, color 14
-    ; SIMPLIFIED to avoid crash
-    mov dx, 0
-.vline_loop:
+    ; Draw 11 vertical lines at X = 0, 16, 32, ... 144, 159 (last at right edge)
+    xor bx, bx              ; BX = X position
+.vgrid_loop:
+    ; Draw vertical line at X = BX
+    xor dx, dx              ; DX = Y counter
+.vline_y:
     cmp dx, 200
-    jae .vline_done
+    jae .vline_next
     
-    ; Set up for hline drawing (draw 1-pixel wide "line")
-    mov word [circle_x1], 80
-    mov word [circle_x2], 80
-    mov byte [circle_color], 14
+    mov [circle_x1], bx
+    mov [circle_x2], bx
     mov ax, dx
-    
+    push bx
     push dx
     call draw_hline_packed
     pop dx
-    
+    pop bx
     inc dx
-    jmp .vline_loop
+    jmp .vline_y
     
-.vline_done:
+.vline_next:
+    add bx, 16              ; Next grid line
+    cmp bx, 160
+    jb .vgrid_loop
+    ; Draw final line at X=159 (right edge)
+    mov bx, 159
+    xor dx, dx
+.vline_final:
+    cmp dx, 200
+    jae .vgrid_done
+    mov word [circle_x1], 159
+    mov word [circle_x2], 159
+    mov ax, dx
+    push dx
+    call draw_hline_packed
+    pop dx
+    inc dx
+    jmp .vline_final
+.vgrid_done:
+    
+    ; --- Draw 8 color boxes (bright CGA colors 8-15) ---
+    ; Each box: 10 pixels wide, 40 pixels tall
+    ; Total width: 80 pixels, centered at X=80 → X = 40 to 119
+    ; Centered at Y=100 → Y = 80 to 119
+    
+    mov cl, 8               ; Start with color 8 (Dark Gray)
+    mov bx, 40              ; Start X position
+    
+.colorbox_loop:
+    cmp cl, 16
+    jae .colorbox_done
+    
+    mov [circle_color], cl
+    
+    ; Draw box from Y=80 to Y=119 (40 rows)
+    mov dx, 80              ; Start Y
+.colorbox_row:
+    cmp dx, 120
+    jae .colorbox_next
+    
+    mov [circle_x1], bx
+    mov ax, bx
+    add ax, 9               ; 10 pixels wide (0-9)
+    mov [circle_x2], ax
+    mov ax, dx
+    push bx
+    push cx
+    push dx
+    call draw_hline_packed
+    pop dx
+    pop cx
+    pop bx
+    inc dx
+    jmp .colorbox_row
+    
+.colorbox_next:
+    add bx, 10              ; Next box
+    inc cl                  ; Next color
+    jmp .colorbox_loop
+.colorbox_done:
+    
+    ; --- Draw dither gradient (black to white) ---
+    ; Width = 80 pixels (X = 40 to 119), Height = 21 pixels
+    ; Position: Y = 120 to 140 (directly below color boxes)
+    ; 8 bands × 10 pixels = 80 pixels (solid grey levels 0-7)
+    
+    mov cl, 0               ; Start with grey 0 (black)
+    mov bx, 40              ; Start X position
+    
+.gradbox_loop:
+    cmp cl, 8
+    jae .grad_done
+    
+    mov [circle_color], cl
+    
+    ; Draw box from Y=120 to Y=140 (21 rows)
+    mov dx, 120             ; Start Y
+.gradbox_row:
+    cmp dx, 141
+    jae .gradbox_next
+    
+    mov [circle_x1], bx
+    mov ax, bx
+    add ax, 9               ; 10 pixels wide (0-9)
+    mov [circle_x2], ax
+    mov ax, dx
+    push bx
+    push cx
+    push dx
+    call draw_hline_packed
+    pop dx
+    pop cx
+    pop bx
+    inc dx
+    jmp .gradbox_row
+    
+.gradbox_next:
+    add bx, 10              ; Next box
+    inc cl                  ; Next grey level
+    jmp .gradbox_loop
+    
+.grad_done:
     pop es
+    pop si
     pop di
     pop dx
     pop cx
@@ -524,11 +710,27 @@ draw_test_pattern:
     ret
 
 ; ============================================================================
-; draw_circle - Draw a filled circle that appears round on display
-; Center: (80, 100), Radius: 40 pixels vertically, scaled horizontally
-; Compensates for non-square pixel aspect ratio
+; draw_circle - Draw a filled circle with RANDOM color
+; Center: (80, 100), Radius: 80 pixels vertically
+; Uses pre-calculated lookup table with aspect ratio correction (1.667:1)
+; for 160x200 resolution on 4:3 display
 ; ============================================================================
 draw_circle:
+    ; Pick random color for circle (1-15, not 0 which is black)
+    call random_byte
+    and al, 0x0F
+    jnz .color_ok
+    inc al                  ; Avoid color 0 (black)
+.color_ok:
+    mov [circle_color], al
+    ; Fall through to draw_circle_color
+
+; ============================================================================
+; draw_circle_color - Draw a filled circle with color in [circle_color]
+; Center: (80, 100), Radius: 80 pixels vertically
+; Set [circle_color] before calling this routine
+; ============================================================================
+draw_circle_color:
     push ax
     push bx
     push cx
@@ -540,57 +742,58 @@ draw_circle:
     mov ax, VIDEO_SEG
     mov es, ax
     
-    call random_byte
-    and al, 0x0F
-    mov [circle_color], al
+    ; Draw circle using lookup table
+    ; Table has 81 entries for dy = 0 to 80
+    ; We draw from Y=20 to Y=180 (center at 100)
     
-    mov word [circle_y], 60     ; Y = 100 - 40
+    mov si, circle_lut      ; SI points to lookup table
+    mov cx, 81              ; 81 scanlines (dy = 0 to 80)
+    mov bx, 0               ; BX = dy offset (0 to 80)
     
-.y_loop:
-    mov ax, [circle_y]
-    cmp ax, 140                 ; Y = 100 + 40
-    ja .done
+.draw_loop:
+    ; Get dx from lookup table
+    mov al, [si]
+    xor ah, ah              ; AX = dx (horizontal extent)
     
-    ; Calculate dy = Y - 100
-    sub ax, 100
-    mov bx, ax                  ; BX = dy
+    ; Calculate X1 = 80 - dx (clamp to 0)
+    mov dx, 80
+    sub dx, ax
+    cmp dx, 0
+    jge .x1_ok
+    xor dx, dx
+.x1_ok:
+    mov [circle_x1], dx
     
-    ; Calculate dy²
-    mov ax, bx
+    ; Calculate X2 = 80 + dx (clamp to 159)
+    mov dx, 80
+    add dx, ax
+    cmp dx, 159
+    jle .x2_ok
+    mov dx, 159
+.x2_ok:
+    mov [circle_x2], dx
+    
+    ; Draw top half: Y = 100 - dy
+    mov ax, 100
+    sub ax, bx              ; AX = 100 - dy
     cmp ax, 0
-    jge .pos
-    neg ax
-.pos:
-    mov cx, ax
-    mul cx                      ; AX = dy²
+    jl .skip_top
+    call draw_hline_packed
+.skip_top:
     
-    ; Calculate 1600 - dy² (radius² = 1600)
-    mov cx, 1600
-    sub cx, ax
-    jbe .next_y
-    
-    ; Get sqrt
-    mov ax, cx
-    call simple_sqrt            ; AX = dx
-    
-    ; NO SCALING - let hardware chunky pixels handle aspect ratio
-    mov [circle_dx], ax
-    
-    ; Calculate X coordinates
-    mov ax, 80
-    sub ax, [circle_dx]
-    mov [circle_x1], ax
-    
-    mov ax, 80
-    add ax, [circle_dx]
-    mov [circle_x2], ax
-    
-    mov ax, [circle_y]
+    ; Draw bottom half: Y = 100 + dy (skip dy=0 to avoid double draw)
+    cmp bx, 0
+    je .next_line
+    mov ax, 100
+    add ax, bx              ; AX = 100 + dy
+    cmp ax, 199
+    jg .next_line
     call draw_hline_packed
     
-.next_y:
-    inc word [circle_y]
-    jmp .y_loop
+.next_line:
+    inc si                  ; Next lookup table entry
+    inc bx                  ; Next dy
+    loop .draw_loop
     
 .done:
     pop es
@@ -603,56 +806,29 @@ draw_circle:
     ret
 
 ; ============================================================================
-; simple_sqrt - Very simple integer square root
-; Input: AX = value
-; Output: AX = approximate sqrt
-; Uses simple bit-by-bit calculation
+; Circle lookup table - Pre-calculated dx values for radius 80 circle
+; Aspect ratio corrected for 160x200 on 4:3 display (factor ~0.833)
+; Index = dy (0 to 80), Value = dx (horizontal half-width)
+; Formula: dx = sqrt(80² - dy²) * 0.833
 ; ============================================================================
-simple_sqrt:
-    push bx
-    push cx
-    push dx
-    push si
-    
-    cmp ax, 0
-    je .zero
-    cmp ax, 1
-    je .one
-    
-    ; Use binary search approach
-    mov bx, ax              ; BX = value
-    mov cx, ax
-    shr cx, 1               ; Initial guess = value/2
-    add cx, 1
-    
-    ; Do a few iterations (use SI as counter, not DX!)
-    mov si, 4
-.iter:
-    mov ax, bx              ; AX = value
-    xor dx, dx
-    div cx                  ; AX = value / guess
-    add ax, cx              ; AX = guess + value/guess  
-    shr ax, 1               ; AX = average
-    mov cx, ax              ; New guess
-    dec si                  ; Use SI not DX!
-    jnz .iter
-    
-    mov ax, cx
-    jmp .end
-    
-.zero:
-    xor ax, ax
-    jmp .end
-    
-.one:
-    mov ax, 1
-    
-.end:
-    pop si
-    pop dx
-    pop cx
-    pop bx
-    ret
+circle_lut:
+    db 67, 67, 67, 67, 67   ; dy = 0-4
+    db 66, 66, 66, 66, 66   ; dy = 5-9
+    db 66, 66, 65, 65, 65   ; dy = 10-14
+    db 65, 64, 64, 64, 63   ; dy = 15-19
+    db 63, 62, 62, 61, 61   ; dy = 20-24
+    db 60, 60, 59, 58, 58   ; dy = 25-29
+    db 57, 56, 55, 55, 54   ; dy = 30-34
+    db 53, 52, 51, 50, 49   ; dy = 35-39
+    db 48, 47, 46, 45, 44   ; dy = 40-44
+    db 43, 41, 40, 39, 37   ; dy = 45-49
+    db 36, 34, 33, 31, 29   ; dy = 50-54
+    db 28, 26, 24, 22, 20   ; dy = 55-59
+    db 18, 16, 14, 12, 10   ; dy = 60-64
+    db  8,  7,  6,  5,  5   ; dy = 65-69
+    db  4,  4,  3,  3,  2   ; dy = 70-74
+    db  2,  1,  1,  1,  0   ; dy = 75-79
+    db  0                   ; dy = 80
 
 ; ============================================================================
 ; draw_hline_packed - Draw horizontal line using packed nibbles
@@ -666,6 +842,11 @@ draw_hline_packed:
     push dx
     push di
     push si
+    push es
+    
+    ; Set ES to video segment
+    mov bx, VIDEO_SEG
+    mov es, bx
     
     mov si, ax              ; SI = Y
     
@@ -752,6 +933,7 @@ draw_hline_packed:
     jmp .ploop
     
 .done:
+    pop es
     pop si
     pop di
     pop dx
@@ -811,26 +993,312 @@ generate_random_palette:
     pop ax
     ret
 
-; Fixed rainbow palette - kept for reference
-; Format: Red (bits 0-2), Green (bits 4-6) | Blue (bits 0-2)
-; True 512-color palette (3 bits per channel)
-rainbow_palette:
-    db 0x04, 0x44    ; 0:  Gray 
-    db 0x07, 0x00    ; 1:  Red         (R:7, G:0, B:0)
-    db 0x00, 0x70    ; 2:  Green       (R:0, G:7, B:0)
-    db 0x07, 0x70    ; 3:  Yellow      (R:7, G:7, B:0)
-    db 0x00, 0x07    ; 4:  Blue        (R:0, G:0, B:7)
-    db 0x07, 0x07    ; 5:  Magenta     (R:7, G:0, B:7)
-    db 0x00, 0x77    ; 6:  Cyan        (R:0, G:7, B:7)
-    db 0x07, 0x77    ; 7:  White       (R:7, G:7, B:7)
-    db 0x07, 0x40    ; 8:  Orange      (R:7, G:4, B:0)
-    db 0x04, 0x70    ; 9:  Lime        (R:4, G:7, B:0)
-    db 0x00, 0x47    ; 10: Sky Blue    (R:0, G:4, B:7)
-    db 0x04, 0x07    ; 11: Purple      (R:4, G:0, B:7)
-    db 0x07, 0x47    ; 12: Pink        (R:7, G:4, B:7)
-    db 0x04, 0x74    ; 13: Aqua        (R:4, G:7, B:4)
-    db 0x07, 0x04    ; 14: Brown       (R:7, G:0, B:4)
-    db 0x06, 0x66    ; 15: Light Gray  (R:6, G:6, B:6)
+; ============================================================================
+; draw_gradient - Show 16 dithered shades of a single color
+; Uses 8 palette entries with dithering to simulate 16 shades
+; Press D repeatedly to cycle: Red → Green → Blue → Gray → Red...
+;
+; Shades 0,2,4,6,8,10,12,14 = solid colors (palette 0-7)
+; Shades 1,3,5,7,9,11,13,15 = dithered between adjacent palette colors
+; ============================================================================
+draw_gradient:
+    push ax
+    push bx
+    push cx
+    push dx
+    push di
+    push si
+    push es
+    
+    ; Set up palette based on current mode
+    call setup_gradient_palette
+    call set_palette
+    
+    ; Clear and draw 16 bands with dithering
+    call clear_screen
+    
+    mov ax, VIDEO_SEG
+    mov es, ax
+    
+    ; Each band is 12 rows tall (16 * 12 = 192 rows, 8 rows black at bottom)
+    xor si, si              ; SI = row counter (0-199)
+    
+.row_loop:
+    ; Calculate base offset for this row
+    mov ax, si
+    shr ax, 1               ; AX = row / 2
+    mov bx, 80
+    mul bx                  ; AX = (row/2) * 80
+    mov di, ax
+    test si, 1
+    jz .even_row
+    add di, 0x2000
+.even_row:
+    
+    ; Calculate shade = row / 12 (gives 0-15)
+    mov ax, si
+    mov bl, 12
+    div bl                  ; AL = shade (0-15)
+    cmp al, 15
+    jbe .shade_ok
+    mov al, 15
+.shade_ok:
+    mov bl, al              ; BL = shade (0-15)
+    
+    ; Determine if solid or dithered
+    ; Even shades (0,2,4,...) = solid palette color (shade/2)
+    ; Odd shades (1,3,5,...) = dither between (shade/2) and (shade/2 + 1)
+    test bl, 1
+    jnz .dithered_row
+    
+    ; Solid row: color = shade / 2
+    mov al, bl
+    shr al, 1               ; AL = palette index (0-7)
+    mov ah, al
+    shl ah, 4
+    or al, ah               ; AL = packed solid color
+    
+    ; Fill row with solid color
+    mov cx, 80
+    cld
+    rep stosb
+    jmp .next_row
+    
+.dithered_row:
+    ; Dithered row: alternate between color1 and color2
+    ; color1 = shade / 2, color2 = shade / 2 + 1 (clamped to 7)
+    mov al, bl
+    shr al, 1               ; AL = color1 (0-7)
+    mov cl, al              ; CL = color1
+    inc al
+    cmp al, 7
+    jbe .col2_ok
+    mov al, 7
+.col2_ok:
+    mov ch, al              ; CH = color2
+    
+    ; 1-pixel checkerboard dithering:
+    ; Pattern A: (color1 << 4) | color2 = pixel0=c1, pixel1=c2
+    ; Pattern B: (color2 << 4) | color1 = pixel0=c2, pixel1=c1
+    ; Use same pattern for entire row, swap on alternate rows
+    mov al, cl
+    shl al, 4
+    or al, ch               ; AL = pattern A
+    mov bl, al              ; BL = pattern A
+    
+    ; Choose pattern based on row number for vertical dithering
+    test si, 1
+    jz .use_pattern_a
+    ; Odd row: use pattern B (swapped nibbles)
+    mov al, ch
+    shl al, 4
+    or al, cl               ; AL = pattern B
+    mov bl, al
+.use_pattern_a:
+    
+    ; Fill entire row with same pattern (creates 1-pixel checkerboard)
+    mov al, bl
+    mov cx, 80
+    cld
+    rep stosb
+    
+.next_row:
+    inc si
+    cmp si, 192             ; Only fill 192 rows (16 bands × 12)
+    jb .row_loop
+    
+    ; Cycle to next mode for next D press: 0=Red, 1=Green, 2=Blue, 3=Gray
+    inc byte [gradient_mode]
+    cmp byte [gradient_mode], 4
+    jb .mode_ok
+    mov byte [gradient_mode], 0  ; Wrap back to red
+.mode_ok:
+    
+    pop es
+    pop si
+    pop di
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+; ============================================================================
+; setup_test_palette - Set palette for test pattern
+; Colors 0-7: 8 true grey levels (R=G=B, from 0 to 7)
+; Colors 8-15: CGA bright colors (for color boxes)
+; ============================================================================
+setup_test_palette:
+    push ax
+    push bx
+    push cx
+    push di
+    
+    mov di, palette
+    
+    ; Colors 0-7: Grey levels (R=G=B from 0 to 7)
+    xor bx, bx              ; BX = intensity 0-7
+.grey_loop:
+    mov [di], bl            ; R = intensity
+    inc di
+    mov al, bl
+    shl al, 4               ; G in bits 4-6
+    or al, bl               ; B in bits 0-2
+    mov [di], al            ; G=B=intensity
+    inc di
+    inc bx
+    cmp bx, 8
+    jb .grey_loop
+    
+    ; Colors 8-15: Copy CGA bright colors (from cga_colors offset 16)
+    mov si, cga_colors + 16 ; Start at color 8 in CGA palette
+    mov cx, 16              ; 8 colors × 2 bytes
+.bright_loop:
+    mov al, [si]
+    mov [di], al
+    inc si
+    inc di
+    loop .bright_loop
+    
+    pop di
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+; ============================================================================
+; setup_gradient_palette - Set palette for current gradient mode
+; Mode 0: Red (R=0-7, G=0, B=0)
+; Mode 1: Blue (R=0, G=0, B=0-7)
+; Mode 2: Green (R=0, G=0-7, B=0)
+; Mode 3: Gray (R=G=B=0-7)
+; ============================================================================
+setup_gradient_palette:
+    push ax
+    push bx
+    push cx
+    push di
+    
+    mov di, palette
+    xor bx, bx              ; BX = intensity 0-7
+    mov cl, [gradient_mode]
+    
+.pal_loop:
+    ; Based on mode, set R and GB bytes
+    cmp cl, 0
+    je .mode_red
+    cmp cl, 1
+    je .mode_blue
+    cmp cl, 2
+    je .mode_green
+    jmp .mode_gray
+    
+.mode_red:
+    mov [di], bl            ; R = intensity
+    inc di
+    mov byte [di], 0        ; G=0, B=0
+    inc di
+    jmp .next_color
+    
+.mode_blue:
+    mov byte [di], 0        ; R=0
+    inc di
+    mov [di], bl            ; G=0, B=intensity
+    inc di
+    jmp .next_color
+    
+.mode_green:
+    mov byte [di], 0        ; R=0
+    inc di
+    mov al, bl
+    shl al, 4               ; G in bits 4-6
+    mov [di], al            ; G=intensity, B=0
+    inc di
+    jmp .next_color
+    
+.mode_gray:
+    mov [di], bl            ; R = intensity
+    inc di
+    mov al, bl
+    shl al, 4               ; G in bits 4-6
+    or al, bl               ; B in bits 0-2
+    mov [di], al            ; G=B=intensity
+    inc di
+    
+.next_color:
+    inc bx
+    cmp bx, 8
+    jb .pal_loop
+    
+    ; Fill remaining palette entries (8-15) with black
+    mov cx, 16              ; 8 colors × 2 bytes
+    xor al, al
+.fill_rest:
+    mov [di], al
+    inc di
+    loop .fill_rest
+    
+    pop di
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+; ============================================================================
+; reset_screen - Reset to startup state (CGA palette, black border, 16 bars)
+; ============================================================================
+reset_screen:
+    call clear_screen
+    call set_cga_palette
+    call set_palette
+    mov byte [bar_width], 10
+    mov byte [border_color], 0
+    xor al, al
+    out PORT_COLOR, al      ; Reset border to black
+    call draw_color_bars
+    ret
+
+; ============================================================================
+; set_cga_palette - Set palette to standard CGA text mode colors
+; Copies the 16 CGA colors to the palette buffer
+; ============================================================================
+set_cga_palette:
+    push cx
+    push si
+    push di
+    
+    mov si, cga_colors
+    mov di, palette
+    mov cx, 32              ; 16 colors × 2 bytes
+    cld
+    rep movsb
+    
+    pop di
+    pop si
+    pop cx
+    ret
+
+; ============================================================================
+; Standard CGA text mode palette (16 colors)
+; Format: Byte 1 = Red (bits 0-2), Byte 2 = Green (bits 4-6) | Blue (bits 0-2)
+; ============================================================================
+cga_colors:
+    db 0x00, 0x00    ; 0:  Black
+    db 0x00, 0x05    ; 1:  Blue
+    db 0x00, 0x50    ; 2:  Green
+    db 0x00, 0x55    ; 3:  Cyan
+    db 0x05, 0x00    ; 4:  Red
+    db 0x05, 0x05    ; 5:  Magenta
+    db 0x05, 0x20    ; 6:  Brown (dark yellow-orange)
+    db 0x05, 0x55    ; 7:  Light Gray
+    db 0x02, 0x22    ; 8:  Dark Gray
+    db 0x02, 0x27    ; 9:  Light Blue
+    db 0x02, 0x72    ; 10: Light Green
+    db 0x02, 0x77    ; 11: Light Cyan
+    db 0x07, 0x22    ; 12: Light Red
+    db 0x07, 0x27    ; 13: Light Magenta
+    db 0x07, 0x70    ; 14: Yellow
+    db 0x07, 0x77    ; 15: White
 
 ; ============================================================================
 ; init_random - Initialize random number generator from timer
@@ -882,18 +1350,98 @@ wait_key:
     ret
 
 ; ============================================================================
+; check_help_arg - Check if /? or /h was passed on command line
+; Output: CF set if help requested, CF clear otherwise
+; ============================================================================
+check_help_arg:
+    push si
+    
+    ; PSP command line: byte at 0x80 = length, 0x81+ = command tail
+    mov si, 0x81
+    
+.skip_spaces:
+    lodsb
+    cmp al, ' '
+    je .skip_spaces
+    cmp al, 0x0D                ; End of command line
+    je .no_help
+    
+    ; Check for / or -
+    cmp al, '/'
+    je .check_char
+    cmp al, '-'
+    je .check_char
+    jmp .no_help
+    
+.check_char:
+    lodsb
+    ; Check for ? or h or H
+    cmp al, '?'
+    je .help_found
+    cmp al, 'h'
+    je .help_found
+    cmp al, 'H'
+    je .help_found
+    
+.no_help:
+    clc                         ; Clear carry = no help
+    pop si
+    ret
+    
+.help_found:
+    stc                         ; Set carry = help requested
+    pop si
+    ret
+
+; ============================================================================
+; print_help - Print help screen to console
+; ============================================================================
+print_help:
+    push ax
+    push dx
+    
+    mov dx, help_text
+    mov ah, 0x09                ; DOS print string
+    int 0x21
+    
+    pop dx
+    pop ax
+    ret
+
+; ============================================================================
 ; Data Section
 ; ============================================================================
-rand_seed:      dw 0            ; Random number seed
-bar_width:      db 10           ; Bar width in DISPLAY pixels (gets divided by 2 for 80-pixel mode)
-border_color:   db 0            ; Current border color (0-15)
 
-; Circle drawing variables
-circle_color:   db 0
-circle_y:       dw 0
-circle_dx:      dw 0
-circle_x1:      dw 0
-circle_x2:      dw 0
+; Help text ($ terminated for DOS function 09h)
+help_text:
+    db 'COLORBARS.COM - Hidden graphics mode demo for Olivetti Prodest PC1', 13, 10
+    db 'Hidden 160x200x16 Graphics Mode', 13, 10
+    db 'Written for NASM - NEC V40 (80186 compatible)', 13, 10
+    db 'By Retro Erik - 2026', 13, 10
+    db 13, 10
+    db 'Controls:', 13, 10
+    db '  SPACE - Cycle palette colors (random from 512-color palette)', 13, 10
+    db '  W     - Reset to startup screen (CGA palette, 16 bars)', 13, 10
+    db '  A     - Cycle border color (0-15)', 13, 10
+    db '  Q     - Draw random colored circle(ish)', 13, 10
+    db '  D     - Gradient dither demo (cycles Red->Green->Blue->Gray)', 13, 10
+    db '  T     - Draw test pattern (10x10 grid, 8 color boxes, gradient)', 13, 10
+    db '  0     - Set bar width to 10 pixels (fills entire screen width)', 13, 10
+    db '  1-9   - Set bar width to 1-9 pixels (16 bars from left edge)', 13, 10
+    db '  ESC   - Exit to DOS in text mode', 13, 10
+    db '$'
+
+rand_seed:      dw 0            ; Random number seed
+bar_width:      db 10           ; Bar width in pixels (1-10)
+border_color:   db 0            ; Current border color (0-15)
+gradient_mode:  db 0            ; Gradient color mode: 0=Red, 1=Green, 2=Blue, 3=Gray
+orig_video_mode: db 0           ; Original video mode before program start
+orig_text_attr: db 0x07         ; Original text attribute (default: light gray on black)
+
+; Drawing variables (shared by circle and hline routines)
+circle_color:   db 0            ; Current drawing color (0-15)
+circle_x1:      dw 0            ; Line start X coordinate
+circle_x2:      dw 0            ; Line end X coordinate
 
 ; Palette buffer - 32 bytes (16 colors × 2 bytes each)
 ; Will be filled with random values
