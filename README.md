@@ -114,6 +114,85 @@ Row offset calculation:
 
 See [DEVELOPMENT_SUMMARY.md](DEVELOPMENT_SUMMARY.md) for detailed technical specifications.
 
+## Compatibility with Other V6355-Based Systems
+
+The Yamaha V6355/V6355D video chip was used in several computers and add-on cards beyond the Olivetti Prodest PC1. The most notable are:
+
+### Zenith Z-180 Series Laptops (Z-181, Z-183)
+
+**What it is:** Portable laptop computers manufactured by Zenith Data Systems in the late 1980s, featuring both an internal LCD panel and external video output capability.
+
+**Hardware Specifications:**
+- CPU: Intel x86-compatible (8086/8088-based)
+- Video: Yamaha V6355 LCDC
+- Display: Internal LCD + external RGB CRT output
+- Video outputs: Standard RGB (R, G, B, I) CGA-compatible connector
+- Dual-mode: Can drive LCD or CRT simultaneously
+
+**Code Compatibility:**
+The V6355 chip and register layout are identical, but modifications are needed:
+
+| Component | PC1 Value | Z-180 Value | Required Change |
+|-----------|-----------|-------------|-----------------|
+| **I/O Ports** | 0xD8, 0xD9, 0xDD, 0xDE | 0x3D8, 0x3D9, 0x3DD, 0x3DE | Update all port addresses (add 0x300) |
+| **Video Segment** | 0xB000 | Unknown (needs testing) | Verify video RAM location |
+| **Register 0x65** | 0x09 (CRT, PAL) | Needs LCD-specific value | LCD requires different timing |
+| **Display Type** | CRT (SCART) | LCD or external CRT | Bit 5 of Reg 0x65 (0=CRT, 1=LCD) |
+
+**Recommended Approach:**
+1. Change all port addresses from 0xDx to 0x3Dx
+2. Test video segment (try 0xB000, 0xB800)
+3. For LCD mode: Set bit 5 of register 0x65 to 1
+4. Adjust timing parameters if needed (registers 0x65, 0x67)
+
+### ACV-1030 Color Graphics Adapter
+
+**What it is:** An ISA expansion card for IBM PC/XT/AT compatible computers, using the V6355 chip to provide CGA-compatible graphics with extended capabilities.
+
+**Hardware Specifications:**
+- Form factor: ISA short-slot expansion card
+- Video: Yamaha V6355 LCDC
+- Video outputs: 
+  - Standard 9-pin CGA RGB connector (R, G, B, Intensity, H-sync, V-sync)
+  - Composite video output (4-pin header)
+  - RF modulator support
+- Compatible with: IBM PC/XT/AT and clones
+
+**Code Compatibility:**
+The ACV-1030 follows IBM CGA standard more closely than the PC1:
+
+| Component | PC1 Value | ACV-1030 Value | Required Change |
+|-----------|-----------|----------------|-----------------|
+| **Video Segment** | 0xB000 | **0xB800** | **Must change to 0xB800** |
+| **I/O Ports** | 0xD8, 0xD9, 0xDD, 0xDE | 0x3D8, 0x3D9, 0x3DD, 0x3DE | Update all port addresses (add 0x300) |
+| **Register 0x65** | 0x09 (200 lines, PAL) | Same | Should work as-is |
+| **Register 0x67** | 0x18 (8-bit bus) | Same | Should work as-is |
+
+**Required Code Changes for ACV-1030:**
+```nasm
+; Change these constants:
+VIDEO_SEG       equ 0xB800      ; Was 0xB000 on PC1
+PORT_REG_ADDR   equ 0x3DD       ; Was 0xDD
+PORT_REG_DATA   equ 0x3DE       ; Was 0xDE
+PORT_MODE       equ 0x3D8       ; Was 0xD8
+PORT_COLOR      equ 0x3D9       ; Was 0xD9
+```
+
+**Why it should work:**
+- Same V6355 chip with identical register bank
+- Standard CGA video memory layout (even/odd row interlacing)
+- RGB output compatible with SCART (via proper cable)
+- Palette registers (0x40–0x5F) function identically
+
+### Summary
+
+Both the Zenith Z-180 and ACV-1030 use the same Yamaha V6355 video controller and support RGB output, making them theoretically compatible with this hidden 160×200×16 color mode. The main differences are:
+
+- **ACV-1030:** Straightforward port—just change video segment to 0xB800 and port addresses to 0x3Dxx
+- **Zenith Z-180:** More complex—needs port changes, video segment verification, and LCD vs CRT mode consideration
+
+The 16-color palette mode should work on both systems since it's a feature of the V6355 chip itself, not the PC1 hardware.
+
 ## Credits
 
 - **Author:** Dag Erik Hagesæter (Retro Erik)
