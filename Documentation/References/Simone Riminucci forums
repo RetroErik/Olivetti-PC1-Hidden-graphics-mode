@@ -1,0 +1,36 @@
+Documentation from Simone Riminucci
+
+Simone Riminucci has made a video player that uses the special PC1 graphics mode to display 16 colors in 160x200
+On vcfed.org he wrote:
+Unlocked the 160x200x16 colors mode on a 1986's NEC V40 Olivetti Prodest PC1 - a new CGA ModeX call it! ;)
+This is the result. Despite low resolution and color limitation (and lack of MHz!):
+
+He got a question from:reenigne
+Very nice! That machine doesn't have a composite output, does it? (Even if it does, I'm noticing a distinct lack of composite artifacting in your images). And there doesn't appear to be any attribute clash in the video as far as I can tell. So I think you must be doing something that only works with the clone CGA of the Olivetti and not an IBM CGA. What I'm wondering is if your frame buffer is 16kB or 32kB. With a 32kB frame buffer it's possible that you might be using the "left half bar" trick that can be used on IBM CGA to get a 160x100x16 mode, but with half the number of scanlines per row. If this machine only has 16kB of VRAM then you must have either found a way to pack two pixels into every byte, or you're updating the VRAM fast enough to "race the beam" (is the CPU fast enough for that at 8MHz?)
+
+Is your player based on Trixter's 8088 Domination player or something else? What's the data transfer rate?
+
+Nice work with the error diffusion in the encoder. There are some problems with using this type of diffusion with animation, but they aren't too bothersome for most of this video.
+
+He got a question from:Scali
+I guess that's why we're not seeing artifacts?
+How does this mode work? Do you connect it to an analog RGB monitor, eg VGA? Or how does it make the 512 shades? Is it an advanced composite output?
+
+He got a question from:Trixter
+Very cool. Do you have any details on how you programmed that mode? I'm curious if the 16-color hack works on my Olivetti M24 (6300). I know the palette stuff won't work, but maybe there's something in the video chip I've overlooked. I know that the 6300/M24 has 32K of video RAM which means it has two "CGA pages", but I didn't see anything about alternate video modes.
+
+Simone answered:
+@reengine: The machine has no composite out, but the video chip (YAMAHA V6355) has it, but is disconnected. All test i did with that pin was a not-so-clear picture. Maybe the PAL tv set didn't help. But this effect is a different trick.
+All test to "race the beam" failed also on line basis (changing 16 color per line is too slow also for 80186, and i need to use many OUTs... maybe change only 4 color could be achieved... but per line)
+
+The machine has 16kb video memory (repeated four times from B000 to BFFF), and i activated 160x200x16 mode that is proprietary of then YAMAHA chip but in common with i.e. IBM PCJR. That video mode was in pre-production specification but was dropped in the final (maybe because after the PCJR market failure?). No trace also in the BIOS. Fiddling with registers finally open that mode!
+
+@Scali: The Olivetti PC1 is connected to the RGB (analog) to the TV set via SCART, but I build a cable C/Amiga 1084s to display RGB (very nice). RGBI digital did not permit to redefine colors: the output is the same 160x200 but the 16 color are from standard CGA/EGA set. The video chip can freely redefine the 16 colors with a 3 bit for each R/G/B channel. 9 bit RGB is like MSX palette, limited but better than fixed EGA. Similar to MSX the chip is capable of 512x192 pixel and a whooping 640x204 resolution (but sadly, the two resolutions are monochrome!). The chip is capable also of 640x200x16 but in a different configuration (require extra circuits and video RAM).
+Redefining the palette each frame should indeed be possible (out of retrace time), but I have to build a special video encoder. Also time is critical.
+For reaching 25fps I had to load directly to video memory the byte flux already interlaced and exactly of 16384 byte (instead of 16000). Also because we have the video RAM repeated 4 times I loaded 4 frame each INT13 call. (loading 128 consecutive sectors from hard disk). Not much time left to make other tricks...
+
+@Trixter:Yea I have the detail and the port you have to write. However the hack would work only on YAMAHA V6355D. M24 has a 640x400 mode (16 color with dedicated expansion card), some of the bios call vestigia are found in PC1's BIOS but is a complete different beast.
+I have another machine Olivetti M200, also with NEC V40 but has a VLSI chip (for what I see) that use 640x400 (and a neat 8x16 character set!) and maybe similar to M24. If I found something I'll tell you.
+
+----------------------------------
+Simone has also made mouse driver for the PC1. We have the source code for this if needed.

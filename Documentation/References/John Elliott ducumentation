@@ -1,0 +1,248 @@
+Documentation of the Olivetti Prodest PC1 Graphics mode by John Elliott
+
+
+BIOS
+The PC1's BIOS is in a 16k ROM, which is mapped into memory at 0xFC000 (it repeats at 0xF0000, 0xF4000 and 0xF8000). In structure it appears to be a cut-down version of the ROM from the Olivetti M24 (aka AT&T 6300); I'll point out similarities and differences. My thanks to Knut Roll-Lund for providing information on the M24 BIOS.
+
+At the start of the ROM is a table of entry points, possibly for expansion ROMs to use.
+
+FC000:   DB      46h	;'F'	;On the M24, this is a ROM checksum
+FC001:   DB	 49h	;'I'	;On the M24, ROM revision number
+FC002:   DW      offset of master data table
+FC004:   entry   Far subroutine to print string at DS:SI
+FC008:   DD      V40 NMI handler. On the M24, this was 
+		 a far subroutine to print CR/LF.
+FC00C:   entry   Far subroutine to print a ':'
+FC010:   entry   Far subroutine to print as hex the DWORD value DS:AX
+FC014:   entry   Far subroutine to print as hex the WORD value AX
+FC018:   entry   Far subroutine to print as hex the BYTE value AL
+FC01C:   entry   Far subroutine to print as hex the NIBBLE value AL
+FC020:   entry   Far subroutine to print as decimal the WORD value in AX
+FC024:   entry   Far subroutine to print as decimal the WORD value in AX,
+                 with BX = number of columns to right-align it in.
+FC028:   entry   Checksum 16k of memory starting at DS:SI. Returns AH=checksum
+                 with flags reflecting AH.
+FC02C:   entry   On the M24: Test the real time clock
+FC030:   entry   Test 512k of RAM starting at DX:0
+FC034:   entry   Hard drive initialisation
+FC038:   entry   No-op. On the M24, format hard drive (also a no-op).
+FC03C:   DW      offset of 'Resident Diagnostics' ASCIIZ message
+FC03E:   DW      0
+FC040:   RS      20h     ;ASCIIZ copyright message
+The supplied PC1 utilities use the word at FFFFD as an installation check. They require it to equal 0FE44h (machine type XT, subtype 0x44).
+
+Memory variables
+The PC1 BIOS uses the following locations in the BIOS data segment at 40h:
+
+0018:	BYTE	Keyboard status. On a normal XT, the low 4 bits of this
+		are unused. On the PC-1, they have these meanings:
+			Bit 0 set for alternative keyboard layout.
+			Bit 1 does not appear to be used.
+			Bit 2 set while handling scancode 0xFF.
+			Bit 3 set if pausing.
+0084:	DWORD	pointer to BIOS master data
+0088:	BYTE	Not used on the PC-1. The M24 uses it to support an optional
+                Z8000 coprocessor.
+		(nb: Subsequent bytes do not appear in the M24 BIOS listing).
+0089:	BYTE	Last value written to port 0x68. Low bit seems to be 0 to
+		enable the built-in CGA chipset.
+008A:	BYTE	BIOS flags:
+			Bit 0 set for Turbo mode
+			Bit 1 set if video hardware has been initialized
+			Bit 2 set if expansion unit is present. If more
+			      than 512k RAM is present, or there is an MDA,
+			      or there is a ROM between 0xC0000 and 0xEFFFF, 
+			      this bit will be set.
+008B:	BYTE	Used by keyboard handler
+008C:	BYTE	0x40 if video mode 0x40 selected, else 0.
+008D:	BYTE	The number of the expansion board causing an I/O CHECK eror.
+008E:	BYTE	Used by hard drive controller.
+008F:	WORD	The 'real' equipment word - returned by INT 0x11. On an IBM
+		BIOS (or an M24) the word at 0040:0010h would be returned.
+0091:	BYTE	The last value returned by a read of port 0x62.
+The V40 chip, DMA, and the Non-Maskable Interrupt
+The V40 processor, like the 80188 it emulates, contains a DMA controller which is not compatible with the 8237 controller used in IBM-compatible PCs. A USENET posting explains that an NMI handler could be used to simulate the PC DMA controller using the onboard controller. This appears to be what the PC1 BIOS does.
+
+The NMI vector for this is at address FC008 rather than 00008. I don't know whether the support chipset ensures that control passes to this vector, or whether it's done by programming the CPU itself.
+
+As well as translating DMA requests, the handler also emulates ports 61h and 62h (Keyboard controller ports B and C).
+
+Display
+The PC1's onboard display controller is a Yamaha V6355D, which emulates CGA. Like Amstrad's PC1512, it omits most of the 6845 CRTC which you'd find in a real CGA or a true emulation thereof. The BIOS doesn't even bother to program the first 10 CRTC registers. You can switch between video modes just by tweaking bits in the mode control register (0x3D8).
+
+The V6355D has its own set of registers, accessed through ports 0x3DD (address) and 0x3DE (data). At startup, if bit 1 of of 0040:008A is zero, then it is set to 1 and the V6355D is initialized using a table of data 0x58 bytes after the INT 1D entry point (the BIOS default table is at F000:F0FC).
+
+My thanks to Simone Riminucci, who maintains a Facebook group for the PC1, for providing me with documentation describing the V6335D. As used by the PC1, the extra registers include:
+
+Registers 0x00-0x1F: Mouse pointer AND mask
+Registers 0x20-0x3F: Mouse pointer XOR mask
+Registers 0x40-0x5F are palette registers. The even-numbered ones hold the red value (bits 0-2); the odd-numbered ones hold blue (bits 0-2) and green (bits 4-6). The palette registers don't apply to CGA monitor output, only to composite video.
+Registers 0x60-0x61: Mouse pointer X position
+Registers 0x62-0x63: Mouse pointer Y position
+Register 0x64: Controls mouse pointer visibility and screen vertical adjustment.
+Register 0x65: Sets screen dimensions and refresh rate:
+Bits 0-1: Vertical height of screen: 0 => 192, 1 => 200; 2 => 204
+Bit 2: Width of screen: 0 => 640 / 320, 1 => 512 / 256
+Bit 3: Vertical refresh: Set for 50Hz, clear for 60Hz
+Bit 4: Monitor type: Set for MDA, clear for CGA
+Bit 7: Enable mouse / light pen
+The BIOS initialises this register to 0x89. The provided CRT.COM utility changes it to 0x81.
+Register 0x66: Selects MDA-compatible attributes (bit 6 for greyscale text, bit 7 to draw blue characters underlined).
+Register 0x67: Adjust horizontal display position
+Register 0x68: Mouse pointer colour. Initialised to 0Fh by the BIOS.
+Register 0x69: "Control data register".
+CRT.COM also appears to access the V6355D registers through ports 0xDD / 0xDE rather than 0x3DD / 0x3DE.
+
+There are YouTube videos showing it's possible to program these registers for a 160×200 16-colour graphics mode. This appears to be done by selecting 320×200 graphics mode and setting bit 6 of the CGA control register at 0x3D8, but I haven't verified this personally.
+
+Video Modes
+The BIOS supports the standard CGA modes 0-6. It also responds to requests for mode 7 (this comes out the same as mode 3) and mode 64 (this comes out the same as mode 6, but can be set to use a different font for the second 128 characters). The mode number passed to INT 0x10 function 0 is not range-checked; other values will cause junk data to be written to the CGA controller.
+
+Mode 64 (0x40) is a vestige of the M24. On the M24, though, it's a 640x400 mode.
+
+Yamaha V6355D Video Chip
+The V6355D is a video chip that emulates CGA and MDA displays. It's used in the Olivetti Prodest PC1 and in standalone video cards like the ACV-1030 video card. According to the data sheet, it can drive CRT monitors or LCD panels. I have only tested it in the PC1 and ACV-1030, in which cases it is always driving a CRT monitor.
+
+vgamuseum.info has a data sheet available, which gives a summary of the chip's capabilities but doesn't describe what the registers do. However the manual for the Zenith Z-180 (pages 103-110) does have a fuller description of the chip's extra registers. My thanks to Simone Riminucci, who maintains a Facebook group for the PC1, for providing me with documentation describing the V6335D.
+
+The technical reference manual for the TM-3034 TurbosPort computer includes a register-level description of the similar (but not compatible) V6366, which can provide insight into the designers' choices.
+
+Note that the behaviour of the chip may be different in different systems, depending on the video card it is on. For example, the ACV-1030 has DIP switches which allow the type of monitor in use to be selected.
+
+Registers
+Emulation of the 6845 CRTC is partial - video is output at fixed timings and writes to CRTC registers 0-9 have no effect (the PC1 BIOS doesn't even bother to program them.)
+
+The usual CGA mode control register at port 0x3D8 is extended to support two extra modes:
+
+
+                        -------Mode register bits-----
+Mode                    6    5    4       3    2  1  0
+--------------------------------------------------------
+Text 40×25              0  blink  0  enable  b/w  0  0
+Text 80×25              0  blink  0  enable  b/w  0  1
+Graphics 160×200        1    n/a  0  enable  b/w  1  0      
+Graphics 320×200        0    n/a  0  enable  b/w  1  0      
+Graphics 640×200 b/w    0    n/a  1  enable  b/w  1  any      
+Graphics 640×200 16 col 1    n/a  1  enable  b/w  1  any      
+--------------------------------------------------------
+Bit 7 is supposed to put the display controller into a low-power standby mode.
+
+I have not been able to activate the two extra modes (160×200 and 640×200×16) on my PC1 or ACV-1030. The V6366 manual says that on that chip, the extra bits in the CGA mode control register can be locked out, and it's possible that the same thing has happened here.
+
+In addition to the usual CGA registers, the V6355D has a bank of registers accessed through ports 0x3DD (register select) / 0x3DE (write data). According to the Z-180 manual (which matches my own observations), these extra registers are write only.
+
+The selected register auto-increments after each write. So a sequence such as:
+
+	outportb(0x3DD, 0x42);	/* select register 0x42 */
+	outportb(0x3DE, 0x05);	/* write to register 0x42 */
+	outportb(0x3DE, 0x00);	/* write to register 0x43 */
+can be used to set multiple registers.
+
+NB: When I tried to use the autoincrement to program a mouse pointer shape, I found that the same code worked reliably on the Prodest PC1 but led to random corruption on the ACV-1030. On the latter it proved necessary to select each register manually before programming it.
+
+The registers thus accessed are:
+
+0x00 - 0x1F: Mouse pointer AND mask. 
+             Registers 0 and 1 define the first line, 2 and 3 define the
+             second line and so on. Bit 7 of the even-numbered register is 
+             the leftmost pixel, bit 0 of the odd-numbered register is the 
+             rightmost.
+
+0x20 - 0x3F: Mouse pointer XOR mask.
+
+             Both pointer masks are initialised to 0 by the Prodest PC1 BIOS.
+
+0x40 - 0x5F: Palette registers. These apply only to composite output (since
+             CGA digital output doesn't support multiple colour levels. 
+             Even-numbered registers hold the red value in bits 0-2; 
+             odd-numbered registers hold blue in bits 0-2, green in bits 4-6.
+
+0x60:        Mouse pointer X position - bit 0 is high bit, bits 7-1 unused.
+0x61:        Mouse pointer X position - low 8 bits
+0x62:        Not used
+0x63:        Mouse pointer Y position
+
+             The mouse pointer is positioned on a 512 × 256 grid, of 
+             which 16 <= X <= 335 and 16 <= Y <= 215 correspond 
+             to the visible screen. That is, the pointer is always positioned
+             using 320×200 resolution. The pointer starts at (0,0) which
+             is completely off the visible screen, so will not be drawn unless
+             it is moved onto the screen (and has its bitmap and other 
+             registers set).
+
+0x64:        Bits 0-2 control mouse pointer visibility:
+                Bit 0: Pointer (if drawn) blinks 
+                Bit 1: Apply pointer AND mask
+                Bit 2: Apply pointer XOR mask
+             Bits 3-5: Vertical adjustment (number of rows to move the screen up)
+             Bits 6,7: Reserved, leave as 0.
+
+0x65:        Monitor control register.
+                Bits 0,1: Screen height
+                          0 => 192 lines
+                          1 => 200 lines
+                          2 => 204 lines
+                          3 =>  64 lines (LCD output only)
+
+		Bit 2: Display is 512 or 256 pixels wide rather than 640 / 320.
+                       Text will output in 64 or 32 columns rather than 80 / 40.
+                
+                Bit 3: Monitor type. 1 => PAL or SECAM (50Hz refresh), 
+                       0 => NTSC (60Hz refresh). On the PC1 the BIOS 
+                       initialises this to PAL/SECAM; the supplied utility
+                       CRT.COM changes it to NTSC.
+
+		Bit 4: Set to use MDA monitor. I tested this with a PC1 and an
+                       MDA-compatible monitor, with indifferent results; the
+                       monitor synced to the signal (when monitor type was set
+                       to NTSC) but with grey background, blurred text and 
+                       visible retrace lines.
+
+                Bit 5: Set to use LCD panel.
+
+                Bit 6: Set to use static RAM for video RAM. If activated on 
+                       a system like the PC1 (which uses dynamic video RAM) 
+                       the screen will display solid 0xFF bytes, and the 
+                       contents of video RAM may be corrupted as they are no
+                       longer being refreshed.
+
+                Bit 7: Pointing device type: 0 => light pen, 1 => mouse.
+                       The PC1 BIOS and utilities always set this to 1.
+
+0x66:      Display Control Register.
+	   Bits 0-1: Adjust LCD vertical position (multiply by 2 to get offset)
+           Bits 2-3: Select LCD driver type:
+                        0=> Dual, 1 bit serial
+                        1=> Dual, four bit parallel
+                      2,3=> Dual, four bit intensity
+           Bits 4-5: LCD driver shift clock frequency
+	   Bit 6: Text attributes are treated as MDA rather than CGA, and 
+                  displayed in greyscale (though the screen border remains in
+                  colour)
+ 	   Bit 7: If set, underlines are drawn on characters with blue 
+                  foreground.
+
+0x67:      Configuration Mode Register.
+           Bits 0-4 adjust horizontal position of display.
+           Bit 5    adjusts LCD control signal period.
+           Bit 6    enables 4-page video RAM (if present)
+           Bit 7    enables 16-bit bus operation. If set on a system with 
+                    an 8-bit bus, results in the controller only being able
+                    to access odd-numbered bytes of video RAM.
+
+0x68:      Mouse pointer colour.
+           The low 4 bits control which RGBI lines the AND shape masks off
+	   (bit 0 => blue, bit 1 => green, bit 2 => red, bit 3 => intensity)
+           They would normally be set to 0, which causes the AND sprite to
+           mask out everything it passes over.
+           The high 4 bits control which RGBI lines the XOR shape toggles. 
+           These would normally all be set to 1, but can be changed to give
+           the pointer a different colour.
+
+           The PC1 BIOS initialises this register to 0x0F, meaning that the
+           pointer is not drawn.
+
+0x69:      Control data register. Documentation is obscure.
+On systems with 64k video RAM, port 0x3DF is used to select one of four 16k pages. I have not found documentation of the exact method used, since the Z180 did not support this configuration.
+
+John Elliott 7 May 2025

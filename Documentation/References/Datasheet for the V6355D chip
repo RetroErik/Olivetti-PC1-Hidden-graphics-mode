@@ -1,0 +1,182 @@
+The datasheet for the V6355D Chip:
+Here is the full text from the **Yamaha V6355D (LCDC) Data Sheet**, formatted for readability and preserving all original wording, tables, and diagrams (as text descriptions). If you want this in multiple parts or a specific section, let me know!
+
+***
+
+# YAMAHA V6355D (LCDC)
+
+## OUTLINE
+
+V6355D (LCDC) is a silicon gate CMOS device. This controller can be connected to both LCD and CRT displays. It is software compatible with IBM-PC and has a function to expand it.
+
+V6355-DF is a 100 pin plastic flat package (QFP) type and V6355-DJ is a 84 pin plastic chip carrier type.
+
+***
+
+## FEATURES
+
+*   Capable of controlling both LCD and CRT displays.
+*   Includes 6845 restricted mode and CRT peripheral circuits for IMB-PC.
+*   Both SRAM and DRAM are usable as VRAM.
+*   Includes MOUSE and LIGHT PEN interface.
+*   Cursor position can be specified by any 16 x 16 dot patterns in the bit unit (AND and EXOR screens).
+*   Includes color palette (16/512 colors).
+*   LCD intensity controllable (16 or 8 gradation steps).
+*   Screen modes are available in combinations of the following:
+    *   Horizontal dot number: 640, 320, 512, 256
+    *   Vertical dot number: 192, 200, 204, 64 (64 only with LCD)
+    *   Raster adjustment: 0, 2, 4 or 6 specifiable
+*   Capable of displaying 16 colors in 640 x 204 by using external circuits.
+*   CRT monitor selectable from among IBM Color, Monochrome, NTSC system and PAL system.
+*   Can be interfaced with 3 types of LCD driver.
+*   Usable with 16 bit bus CPU.
+
+***
+
+## LCDC Block Diagram
+
+\[Block diagram omitted; see original document for image]
+
+***
+
+## Pin Functions
+
+| Signature | I/O | Description                                                                                                                       |
+| --------- | --- | --------------------------------------------------------------------------------------------------------------------------------- |
+| IOR       | I   | Read enable for I/O register, Active at low level                                                                                 |
+| IOW       | I   | Write enable for I/O register, Active at low level                                                                                |
+| IOSEL     | I   | High-order bit decode signal of I/O register address signal, selected at low level                                                |
+| A0-A3     | I   | I/O register address signal                                                                                                       |
+| MEMSEL    | I   | High-order bit decode signal of memory address signal, selected at low level                                                      |
+| MEMR      | I   | Read enable for memory, Active at low level                                                                                       |
+| MEMW      | I   | Write enable for memory, Active at low level                                                                                      |
+| MEMRDY    | O   | Memory (VRAM) access ready signal, Busy (wait) at low level (High impedance state when memory non-selected (MEMSEL = high level)) |
+| WE        | O   | Write enable for memory                                                                                                           |
+| BDIR      | O   | Direction control of bi-directional buffer (for CPU data bus)                                                                     |
+| RESET     | I   | Reset signal                                                                                                                      |
+| CD0-CD7   | I/O | Data bus with CPU                                                                                                                 |
+| RD0-RD7   | I/O | Data bus with VRAM                                                                                                                |
+| AD0-AD7   | O   | VRAM address (At SRAM)                                                                                                            |
+| AD8/CLK   | O   | VRAM address (At DRAM)                                                                                                            |
+| AD9/XR    | O   | VRAM address (At DRAM)                                                                                                            |
+| AD10/XC   | O   | VRAM address (At DRAM)                                                                                                            |
+| AD11/RAS  | O   | VRAM address (At DRAM)                                                                                                            |
+| AD12/CAS  | O   | VRAM address (At DRAM)                                                                                                            |
+| XB        | O   | Data enable when memory read/write                                                                                                |
+| XA        | O   | Memory read/write timing (CPU address enable at SRAM)                                                                             |
+| LSEL      | O   | 1st 8K byte selected                                                                                                              |
+| HSEL      | O   | 2nd 8K byte selected                                                                                                              |
+| RAS       | O   | CPU row Address enable                                                                                                            |
+| CAS       | O   | CPU column Address enable                                                                                                         |
+| DCK       | O   | Outputs external clock dividing signal of 14.31818MHz. Usable for CPU clock by dividing.                                          |
+
+***
+
+## Pin Assignment
+
+\[Pin assignment diagram omitted; see original document for image]
+
+***
+
+## Electrical Characteristics
+
+### 1. Absolute Maximum Ratings
+
+| Parameter       | Signature | Min. | Max.    | Unit |
+| --------------- | --------- | ---- | ------- | ---- |
+| Supply voltage  | VDD       | -0.5 | +7.0    | V    |
+| Input voltage   |           | Vss  | VDD+0.5 | V    |
+| Output voltage  | Vo        | Vss  | VDD+0.5 | V    |
+| Operating temp. | TOP       | 0    | +70     | °C   |
+| Storage temp.   | TSTG      | -50  | +125    | °C   |
+
+(Vss, AVss=0.0V as standard)
+
+### 2. Recommended Conditions for Use
+
+| Parameter       | Signature | Min. | Typ. | Max. | Unit |
+| --------------- | --------- | ---- | ---- | ---- | ---- |
+| Supply voltage  | VDD       | 4.75 | 5.0  | 5.25 | V    |
+| Operating temp. | TOP       | 0    | 25   | 70   | °C   |
+
+Used with VDD and AVDD at the same voltage and Vss, AVss=0.0V.
+
+### 3. DC Characteristics
+
+| Parameter                        | Signature | Conditions  | Min.    | Max. | Unit |
+| -------------------------------- | --------- | ----------- | ------- | ---- | ---- |
+| High-level output voltage (TTL)  | VOH       | IOH= -0.4mA | 2.7     |      | V    |
+| Low-level output voltage (TTL)   | VOL       | IOL=0.8mA   |         | 0.4  | V    |
+| High-level output voltage (CMOS) | VOH       | IOH <1μA    | VDD-0.4 |      | V    |
+| Low-level output voltage (CMOS)  | VOL       | IOL <1μA    |         | 0.4  | V    |
+| High-level input voltage         | VIH       |             | 2.2     |      | V    |
+| Low-level input voltage          | VIL       |             |         | 0.8  | V    |
+| High-level output current        | IOH       | VOH=2.7V    | -0.4    |      | mA   |
+| Low-level output current         | IOL       | VOL=0.4V    |         | 0.8  | mA   |
+| Input leak current               | IL        |             | -10     | 10   | μA   |
+| Output leak current (tri-state)  | ILZ       |             | -10     | 10   | μA   |
+| Supply current (normal op.)      | IDD       | RL=5.6KΩ    |         | 70   | mA   |
+| Supply current (standby)         | IDD       | RL=5.6KΩ    |         | 50   | mA   |
+| High-level clock input voltage   | VCH       |             | 3.6     |      | V    |
+| Low-level clock input voltage    | VCL       |             |         | 0.6  | V    |
+
+***
+
+## System Configuration (Examples)
+
+### 1) When using CRT display (DRAM used)
+
+\[System diagram omitted; see original document for image]
+
+### 2) When using LCD display (SRAM used)
+
+\[System diagram omitted; see original document for image]
+
+***
+
+## V6355D-F Package Dimensions
+
+\[Package dimension diagram omitted; see original document for image]
+
+***
+
+## V6355D-J Pin Assignment
+
+\[Pin assignment diagram omitted; see original document for image]
+
+***
+
+## V6355D-J Package Dimensions
+
+\[Package dimension diagram omitted; see original document for image]
+
+***
+
+## Manufacturer Information
+
+NIPPON GAKKI CO., LTD.
+
+Electronic System Division  
+Toyooka Factory  
+203, Matsunokijima, Toyooka-mura, Iwata-gun, Shizuoka-ken, 438-01  
+Electronic Equipment business section  
+Tel. 053962-3125  
+Fax. 053962-5054
+
+Tokyo Office  
+3-4, Surugadai Kanda. Chiyoda-ku, Tokyo, 104  
+Ryumeikan Bldg. 4F  
+Tel. 03-255-4481
+
+Osaka Office  
+1-6 Shin-ashiya shita, Suita-city. Osaka-fu, 565  
+Tel. 06-877-7731
+
+U.S.A.  
+YAMAHA International Corp.  
+6600 Orangethorpe Ave.  
+Buena Park California 90620
+
+***
+
+If you want any specific section (e.g., pin descriptions, block diagram, system configuration) in more detail or as a separate part, let me know!
