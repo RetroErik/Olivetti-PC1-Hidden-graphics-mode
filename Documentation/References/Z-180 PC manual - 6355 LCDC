@@ -1,0 +1,381 @@
+Here is a copy of the 6355 LCDC Video Controller Documentation.
+Beware: This documentation came from the manual for the Z-180 PC Series Laptop Computers, so the chip could be implemented with the rest of the hardware and BIOS diffrently
+
+## Peripheral Support Circuits
+
+The peripheral support circuits used in the Laptop computer include video interface for either a raster-scan CRT or a liquid crystal display, serial and parallel port control, mass storage control, and keyboard interface. The following sections describe these circuits.
+
+### The 6355 LCDC Video Controller
+
+The one major IC in the video section is a low power CMOS display interface IC that has the unique capability of providing control for two different types of displays. The 6355 liquid crystal display and cathode-ray tube controller (LCDC) provides the signals necessary to produce video on the resident LCD in the computer, and standard R, G, B, and I video signals for use with an external raster-scan CRT video display. The display format implemented through the 6355 controller is compatible with the IBM Color Graphics Adapter format.
+
+All of the capabilities of the popular 6845 CRT controller have been incorporated in the design of the 6355 LCDC. However, many additional features have been provided to allow a high level of system flexibility. The most unique feature is the ability to control a liquid crystal display. Other features include a light-pen interface port, 16 x 16 dot size cursor displayable as either a logical AND or EXCLUSIVE OR symbol, 16 level LCD intensity control, and various resolutions of screen modes.
+
+There are many useful modes and functions available to the user that are selectable through registers in this device. These function calls are software-compatible with the IBM PC format. However, the 6355 contains expanded function calls that allow the user to create a more colorful and flexible screen.
+
+***
+
+## I/O Registers
+
+There are numerous registers within this device that may be accessed by the user to establish modes and function calls. Ten of these registers are general purpose, 8-bit I/O devices designed to set up the video interface for proper operation. The purpose of these registers is detailed in Table 14-21.
+
+**Table 14-21. 6355 LCDC I/O Registers**
+
+| REGISTER                       | ADDRESS (HEX) | R/W |
+| ------------------------------ | ------------- | --- |
+| 6845 Address register          | 4             | W   |
+| 6845 Data register             | 5             | R/W |
+| Mode control/ID register       | 8             | R/W |
+| Color select register          | 9             | W   |
+| Status register                | A             | R   |
+| Clear light-pen register       | B             | W   |
+| Preset light-pen register      | C             | W   |
+| Register bank address register | D             | W   |
+| Register bank data register    | E             | W   |
+| Display page register          | F             | W   |
+
+Note that the mode control and status registers have been partially expanded over that of the 6845 CRTC and that the register bank address register, register bank data register, and display page register are new sections that allow additional performance to be gained. A description of each of the I/O registers detailed in Table 14-21 is given in the following section.
+
+***
+
+### 6845 Address Register
+
+This register is a write-only register that acts as a pointer to other registers within the device. When the four least significant bits of the system address bus equate the Hexadecimal value of 04, and the I/O select signal is active low, this register points to one of the restricted registers indicated in Table 14-22.
+
+**Table 14-22. Restricted Registers**
+
+| REGISTER | ADDRESS POINTER (HEX) | R/W | FUNCTION           |
+| -------- | --------------------- | --- | ------------------ |
+| R10      | 10                    | W   | Cursor start line  |
+| R11      | 11                    | W   | Cursor end line    |
+| R12      | 12                    | R/W | Start address (H)  |
+| R13      | 13                    | R/W | Start address (L)  |
+| R14      | 14                    | R/W | Cursor address (H) |
+| R15      | 15                    | R/W | Cursor address (L) |
+| R16      | 16                    | R   | Light-pen (H)      |
+| R17      | 17                    | R   | Light-pen (L)      |
+
+NOTE: Registers R16 and R17 may also be used as the mouse X-Y counter registers respectively, if that function is desired. When used as the X-Y counter registers, R16 and R17 may only be read and must be cleared after the read operation so that the next set of coordinates provided by the mouse can be placed in the registers.
+
+Note that there are other register values (R0 - R9) that are not detailed in the preceding register summary. These registers are automatically loaded with predetermined values provided by the mode control register. These values provide proper control to allow the video interface to display IBM-compatible 40 x 25 alphanumeric, 80 x 25 alphanumeric, and 80 x 25 graphics video modes.
+
+***
+
+### 6845 Data Register
+
+This register works in conjunction with the 6845 address register to transfer data into one of the registers (see Table 14-22) pointed to by the address register. Note that the data register also is used to access registers R0 - R9 that are not detailed in Table 14-22.
+
+***
+
+### Mode Select/ID Register
+
+The mode selection and identification register is an 8-bit register that can be read from or written to. This register is addressed at hex 8 when the I/O select signal is active low, in conjunction with I/O OUT or IN command as determined by the operation.
+
+During a read operation, the identification code (Hex CO) of the 6355 controller is made available to the system CPU. During a write operation, eight bits of data are placed in the register to establish the video mode of operation. These modes of operation, relative to the bit position of the register, are detailed in Table 14-23.
+
+***
+
+**Table 14-23. Mode Select Register Description**
+
+| BIT | MODE SELECTION DESCRIPTION                                                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0   | When this bit is set to a logical zero, the video mode will be 40 x 25 alphanumeric, and when set to a logical 1, the mode will be 80 x 25 alphanumeric.                                                                                                                                                                       |
+| 1   | When this bit is set to a logical zero, the alphanumerics mode is activated. When this bit is set to a logical 1, the 320 x 200 graphics mode is activated. Note that bits 4 and 6 provide other graphics mode resolutions.                                                                                                    |
+| 2   | When this bit is set to a logical zero, the color burst and chrominance signals are enabled to provide color video. When set to a logical 1 state, the composite intensity level signals are activated to provide monochrome video.                                                                                            |
+| 3   | This bit is used to enable the selected video signal when its status is logical 1. A logical zero disables video and should be set whenever a video mode change is to occur.                                                                                                                                                   |
+| 4   | When this bit is set (1) it provides 640 x 200 pixel resolution in the graphics mode. Bit 6 is used in conjunction with this signal to provide color or monochrome video.                                                                                                                                                      |
+| 5   | When this bit is set to a logical zero, sixteen background colors are available for the video mode. When set to a 1, the BLINK attribute is activated for the alphanumeric modes.                                                                                                                                              |
+| 6   | When this bit is set (1), sixteen colors are available to the graphics modes with the pixel resolution determined by the status of bit 4. When this bit is set to a logical zero, it determines the pixel resolution for the graphics modes (160 x 200 or 640 x 200) and bit 4 determines whether the color mode is activated. |
+| 7   | When this bit is set (1) the LCDC is placed in a low-power consumption stand-by mode. All of the data in the internal register structure is maintained until this bit is reset (0).                                                                                                                                            |
+
+***
+
+### Color Select Register
+
+The color select register is comprised of six bits that may only be written to. The status of the bits are used to establish color selection for the various applicable modes. Table 14-24 details the functions accomplished by each of the bits in this register.
+
+**Table 14-24. Color Select Register Description**
+
+| BIT | COLOR SELECTION DESCRIPTION                                                                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0-3 | These four bits are used to select the screen border color for each of the video modes available in the computer. The screen background color is determined by these bit settings in the 320 x 200 graphics mode of operation. |
+| 4   | When this bit is set to a logical 1, an intensified color set is activated in the 320 x 200 graphics mode of operation.                                                                                                        |
+| 5   | When this bit is set (1), it selects the active set of screen colors for the display. The status of this bit is only used in the medium resolution (320 x 200) color graphics mode of operation.                               |
+
+***
+
+### Status Register
+
+The status register is a 5-bit read-only register that is addressed at Hexadecimal A. The purpose of this register is to provide the system CPU with video status information when polled. Table 14-25 details the status information provided by each of the bits.
+
+**Table 14-25. Status Register Description**
+
+| BIT | STATUS DESCRIPTION                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | When this bit is at a logical zero state, it indicates the “display enable” timing to the system CPU. When this bit is set (1), it indicates that video retrace is occurring and that the display is being held in a disabled state.                                                                                                                                                                                                                                                                                                         |
+| 1   | If an optional light-pen is interfaced to the video controller, a positive-going signal from the device will cause this bit to set (1). If a mouse is being interfaced to the controller, the status of this bit indicates the status of the mouse “Switch 1”. If the status of this bit is zero when using a mouse, it indicates that the mouse “Switch 1” is active.                                                                                                                                                                       |
+| 2   | If a light-pen is interfaced to the controller this bit indicates the status of the light-pen switch. If a mouse is used, this bit indicates the status of mouse “Switch 0”. When this bit is set to a logical zero state, the applicable switch is active.                                                                                                                                                                                                                                                                                  |
+| 3   | During an active vertical retrace period, the status of this bit will be set (1). Note that this bit functions in the same manner as bit 4 if the monochrome video mode is selected.                                                                                                                                                                                                                                                                                                                                                         |
+| 4   | If this bit is set (1) during the monochrome video mode, it indicates that video “dot” information is available. Bit 0 and bit 1 of the register bank address register (not yet discussed) enable the R, G, B, and I signals to function as video “dot” bits. When bits 0 and 1 are both zero, the BLUE dot bit is available. When bit 0 is set and bit 1 is zero, the GREEN dot bit is available. When bit 0 is zero and bit 1 is set, the RED dot bit is available. When bit 0 and bit 1 are both set, the INTENSITY dot bit is available. |
+
+Note that this status register bit is primarily used for testing purposes to make sure that video is occurring properly, and that the mode select, color select, and other write-only registers are operating properly.
+
+***
+
+### Clear/Preset Light-Pen Register
+
+This register set is comprised of two different registers that are addressed at Hexadecimal B and C. These registers may only be written to and affect only light-pen operation. Whenever the register that resides at hex address B is written to, it causes the light-pen flip-flop to be cleared or reset. Any write operation to the register at hex C causes the light-pen flip-flop to become preset.
+
+These two registers are used primarily for testing purposes to make sure that the light-pen flip-flop and status read functions are operating properly.
+
+***
+
+### Register Bank Address and Data Registers
+
+The register bank is comprised of various registers that are used to establish many of the functions that are available to the user. These registers are unique to the 6355 video controller and are accessed through the register bank address and data registers. The required 6-bit address is supplied to the address register which allows access to one of the other internal registers. Data can then be moved into and out of the selected register to establish different functions.
+
+**Table 14-26. Register Bank Internal Registers**
+
+| ADDRESS RANGE   | REGISTER                   |
+| --------------- | -------------------------- |
+| 0000000-0111111 | Cursor pattern data        |
+| 1000000-1011111 | Color palettes 0-15        |
+| 1100000-1100001 | Cursor horizontal location |
+| 1100010-1100011 | Cursor vertical location   |
+| 1100100         | Test/Cursor control        |
+| 1100101         | Monitor Control            |
+| 1100110         | MONO/LCD control           |
+| 1100111         | Configuration mode         |
+| 1101000         | Cursor color select        |
+| 1101001         | Control data               |
+
+***
+
+#### Cursor Pattern Data Register
+
+A very unique feature of this controller is that it can display a screen cursor as a logical AND or EXCLUSIVE OR symbol. This 16x16 dot pattern is provided by this register and the displayed location is determined by the horizontal and vertical location registers. The BLINK attribute and the display enable/disable data for the cursor is contained in the test/cursor control register.
+
+***
+
+#### Color Palette Registers
+
+There are 16 different 8-bit color palette registers (0-15) contained within the register bank structure. Each of these registers are responsible for the colors available to the user in each of the video modes. Sixteen colors out of 512 possibilities may be displayed through use of these registers.
+
+Pixel information from video RAM is used to determine the color to display. Each of the registers are write-only registers that can be written to without causing the display to flicker.
+
+This color palette structure is preset to specific values to be compatible with the IBM PC video format. This occurs whenever a system “reset” occurs. The preset color structure is as follows: black, blue, green, cyan, red, magenta, brown, white, gray, light blue, light green, light cyan, light red, light magenta, yellow, and white.
+
+***
+
+#### Cursor Horizontal and Vertical Location Registers
+
+These registers contain the data that allows the system CPU to accurately track the position of the cursor on the CRT screen. Without this X-Y coordinate structure, it would be extremely difficult to control the display.
+
+***
+
+#### Test/Cursor Control Register
+
+This is an 8-bit write only register that provides the functions detailed in Table 14-27.
+
+**Table 14-27. Test/Cursor Control Register Description**
+
+| BIT | DESCRIPTION                                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------- |
+| 0   | This bit enables cursor blinking when it is set (1). When the status of this bit is zero, blinking is disabled. |
+| 1   | When this bit is set (1), it enables the cursor to be displayed as a logical AND symbol.                        |
+| 2   | When this bit is set (1), it enables the cursor to be displayed as a logical EXCLUSIVE OR symbol.               |
+| 3-5 | These three bits define an offset value that causes the screen raster to be shifted upward in text modes.       |
+| 6-7 | These bits are used for specific controller test purposes and are not considered to user accessible.            |
+
+***
+
+### Monitor Control Register
+
+The monitor control register is used to place data that sets operational requirements for the video interface. These adjustable parameters are detailed in Table 14-28.
+
+**Table 14-28. Monitor Control Register Description**
+
+| BIT | DESCRIPTION                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0-1 | The values of these bits are used to determine the vertical line number of the screen. When bit 0 and bit 1 are both zero, there will be 192 vertical lines. When bit 0 is set and bit 1 is zero, there will be 200 vertical lines. When bit 0 is zero and bit 1 is set, there will be 204 vertical lines. When bit 0 and bit 1 are both set, there will be 64 vertical lines. |
+| 2   | This bit is used to determine the number of horizontal pixels that will be displayed on the screen. If the status of bit 2 is zero, either 640 or 320 horizontal pixels may be displayed. If bit 2 is set, either 512 or 256 horizontal pixels may be displayed.                                                                                                               |
+| 3   | This bit is used to select the type of television standard that is to be used. When bit 3 is set, the PAL/SECAM standard is assumed. When this bit is zero, the NTSC standard is assumed.                                                                                                                                                                                      |
+| 4   | The status of this bit selects between IBM PC-compatible color or monochrome monitor formats.                                                                                                                                                                                                                                                                                  |
+| 5   | When the status of this bit is zero, a raster-scan CRT may be used as the video monitor and when this bit is set, an LCD display may be used.                                                                                                                                                                                                                                  |
+| 6   | The status of this bit allows you to use either static or dynamic RAM devices as video memory. When this bit is zero, dynamic memory may be used and when this bit is set, static memory may be used.                                                                                                                                                                          |
+| 7   | When the status of this bit is zero, it indicates that a light-pen is being used as a pointing device. When this bit is set, it indicates that a mouse is being used.                                                                                                                                                                                                          |
+
+***
+
+### Monochrome/Liquid Crystal Display Control Register
+
+This register is used to select between monochrome and LCD video formats and to provide the proper type of signal for interfacing to each type of device. Table 14-29 details the functions established by each bit in this register.
+
+**Table 14-29. Display Control Register Description**
+
+| BIT | DESCRIPTION                                                                                                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0-1 | These bits select an offset number for the vertical display position of the upper half of an LCD display. When bit 0 and bit 1 are both zero, the offset is zero. When bit 0 is set and bit 1 is zero, the offset is 2. When bit 0 is zero and bit 1 is set, the offset is 4. When bit 0 and bit 1 are both set, the offset is 6.                                  |
+| 2-3 | These bits determine the LCD driver type as follows: when bit 2 and bit 3 are both zero, a dual, one bit, serial type of LCD driver is used; when bit 2 is set and bit 3 is zero, a dual, four bit, parallel type of LCD driver is used; whenever bit 3 is set, a dual, four bit, intensity type of LCD driver is used.                                            |
+| 4-5 | These bits select the LCD driver shift clock frequency. Eight different frequencies can be established by these bit pairs when used with a dual, four bit, parallel driver interface.                                                                                                                                                                              |
+| 6   | When this bit is set it disables the intensity signal to affect the available gray scales that can be displayed. Without the intensity signal, only eight shades of gray may be produced. When this bit is zero, 16 shades are possible.                                                                                                                           |
+| 7   | When this bit is set it determines the format of the monochrome video interface. This function occurs in conjunction with bit 3 of the status register which indicates video dot information, and bit 0 which indicates the horizontal sync to make the underline function available. When this bit is zero, the format is determined by the color adapter in use. |
+
+***
+
+### Configuration Mode Register
+
+The configuration mode register is used to establish various operating parameters necessary for proper control of either an LCD or raster-scan CRT type of device. Table 14-30 details each bit's specific function.
+
+**Table 14-30. Configuration Mode Register Description**
+
+| BIT | DESCRIPTION                                                                                                                                                                                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0-4 | These bits are used to provide different frequencies of the “enable clock” and “write clock” signals that are used for the LCD driver in the LCD mode. In the CRT mode, these bits are used to adjust the horizontal position of the cursor. |
+| 5   | This bit adjusts the control signal period for the type of LCD drive control circuit.                                                                                                                                                        |
+| 6   | This bit allows the “page mode” function to be active when set. 64K DRAM devices may be used that are divided into four display pages.                                                                                                       |
+| 7   | When this bit is set, it enables 16-bit CPU bus operation and allows the 6355 controller to operate as a slave to the system processor.                                                                                                      |
+
+***
+
+### Cursor Color Select Register
+
+The cursor color select register is an 8-bit write only register that allows different combinations of the R, G, B, and I signals to produce various colors of the screen cursor. Bits 0-3 affect the logical AND cursor symbol foreground color and bits 4-7 affect the logical EXCLUSIVE OR cursor symbol foreground color.
+
+***
+
+### Control Data Register
+
+This register simply provides various control signals to the system CPU.
+
+***
+
+### Display Page Register
+
+During the “page mode” this 3-bit write-only register selects one of four 16K pages within a 64K byte space. The page mode is not supported on the static RAM system configuration.
+
+***
+
+## Modes Of Operation
+
+There are normally two basic modes of operation. These are the alphanumeric and graphics modes. The 6355 controller supports six different submodes of operation. One of these modes is selected by the mode select register. Table 14-31 indicates the various modes and how they relate to the mode selection register. The following section describes each mode of operation.
+
+**Table 14-31. Mode Selection Summary**
+
+| MODE           | MODE REGISTER BIT | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
+| -------------- | ----------------- | - | - | - | - | - | - | - |
+| 40 x 25 A/N    |                   | 0 | 0 | 0 | 0 |   |   |   |
+| 80 x 25 A/N    |                   | 0 | 0 | 0 | 1 |   |   |   |
+| 160 x 200 GR   |                   | 1 | X | 0 | 1 | 0 |   |   |
+| 320 x 200 GR   |                   | 0 | X | 0 | 1 | 0 |   |   |
+| 640 x 200 GR   |                   | 0 | X | 0 | 1 | 0 |   |   |
+| 640 x 200 B\&W |                   | 0 | X | 1 | 1 | X |   |   |
+| 640 x 200 CLR  |                   | X | 1 | X | 1 | X |   |   |
+
+NOTE: Any value for bit 2 will cause the mode to be monochrome, any value for bit 3 will enable video, and any value for bit 5 will cause the BLINK attribute to be active in the alphanumeric modes.
+
+***
+
+### Alphanumeric Mode
+
+In the alphanumeric mode, the LCDC controller uses a two-byte character/attribute format to define each display character. The display formats in either a 40-column by 25-line submode or in an 80-column by 25-line submode. In either submode characters are formed in an 8-dot by 8-dot space. Data in the restricted registers R10 and R11 of the controller determines the cursor pattern width and the blinking period (16 frames).
+
+On a monochrome display, several features are available: reverse video, blinking, highlighting, and 16 levels of gray for foreground and background on an individual character basis. On an RGB monitor, 16 foreground, background, or border colors, blinking, and highlighting are available on a per-character basis.
+
+Using 40 x 25 resolution requires 1000 bytes for character information storage and 1000 bytes for attribute information for one screen-page of information. With 16K of video memory, up to eight pages of screens can be stored. Additionally, since all the video memory is directly accessible by the 6355, extreme flexibility in manipulation of screen contents is obtainable. Using 80 x 25 resolution requires more video memory to be used so not as many screens can be stored.
+
+Whenever bit 5 of the mode register is a logical zero, it causes bit 7 of the attribute byte to become the intensity (I) signal. When bit 7 is set (1), 16 colors are available to the screen background. When bit 5 of the mode register is set, bit 7 of the attribute byte enables blinking of the foreground color for a period of 32 frames.
+
+The possible background colors are the same basic eight colors used in low-resolution graphics, plus the lighter shades of these colors which result when intensified, for a total of 16 colors including black and white. In order to obtain the lighter (intensified) shades, the monitor being used must be capable of recognizing the “I” bit.
+
+Note that the logical AND or EXCLUSIVE OR cursor symbols are available in the text modes if so desired. Displaying priority is determined by the contents of the appropriate registers within the register bank and restricted registers of the controller.
+
+The 2-byte character/attribute format is used to define each character display position. These two bytes are mapped into assigned locations in the screen video RAM (this buffer is part of the video interface, not system memory).
+
+***
+
+### Graphics Modes
+
+There are four different graphic modes available to the user. Either the text cursor or the logic symbol cursors can be displayed in any graphic mode. The values placed in registers within the register bank and restricted registers of the 6355 LCDC controller determine which graphic mode of operation is enabled.
+
+#### 160 x 200 Graphics
+
+In this mode of operation, resolution is determined by exciting twice as many picture elements or “pixels” than in the standard 320 x 200 medium-resolution graphics mode. Each redefined pixel size is capable of displaying 16 different colors out of 512 available colors. Color selection is determined by values placed in the color select, mode select, and various other registers within the register bank.
+
+The cursor will exist within a 16-dot by 16-dot area and it will be displayed with medium resolution quality (320 x 200).
+
+#### 320 x 200 Graphics
+
+In the 320 x 200 resolution, each pixel may be one of four colors selected from a palette of 512. Background color is selected through bits 0, 1, 2, and 3 of the color select register. When the status of bit 5 of the color select register is zero, color palette set number 1 is selected for display. When bit 5 is set (1), color palette set number 2 is selected for display. The palette sets are structured as follows:
+
+SET 1  
+Color 1 - Cyan  
+Color 2 - Magenta  
+Color 3 - White
+
+SET 2  
+Color 1 - Green  
+Color 2 - Red  
+Color 3 - Brown
+
+Each video memory byte contains color information for four pixels in 2-bit pairs as in the following format:
+
+7 6 5 4 3 2 1 0  
+C1 C0 \ C1 C0 \ C1 C0 \ C1 C0
+
+For a given pixel bit pair composed of bits C0 and C1, Table 14-32 lists the logic that determines which color is selected from one of four colors: the current background color or one of the colors from the current palette.
+
+**Table 14-32. Color Select Logic**
+
+| C1 | C0 | COLOR SELECT CODE                           |
+| -- | -- | ------------------------------------------- |
+| 0  | 0  | Pixel becomes the current background color. |
+| 0  | 1  | Pixel becomes color #1 of current palette.  |
+| 1  | 0  | Pixel becomes color #2 of current palette.  |
+| 1  | 1  | Pixel becomes color #3 of current palette.  |
+
+#### 640 x 200 Monochrome Graphics
+
+This high-resolution graphics submode is implemented in a monochrome format with each pixel capable of displaying one of two different colors. Addressing and mapping is the same as medium resolution, but formatting of the data is different. In this submode, each bit, as opposed to a bit-pair, represents a pixel on the screen as shown:
+
+Video memory byte  
+7 6 5 4 3 2 1 0  
+1st 2nd 3rd 4th 5th 6th 7th 8th pixels
+
+#### 640 x 200 Color Graphics
+
+In this graphics submode each pixel may be selected to be one of sixteen different colors. A four-bit color code is supplied by external shift registers that correspond to the R, G, B, and I video signals. Additional memory and support logic can also be used in this mode.
+
+***
+
+## Display Interface
+
+Several different kinds of interfaces are supported for raster-scan CRT displays and several types of interfaces are supported for LCD display drivers. Each of these interfaces are implemented through values placed in registers within the register bank. Table 14-33 indicates the supported interfaces.
+
+**Table 14-33. Display Interface Support**
+
+**CRT INTERFACE**
+
+1.  Analog RGB interface for high-resolution, linear intensified color displays.
+2.  Digital RGB interface for high-resolution color display with separate input.
+3.  Composite brightness and chrominance interface for a monochrome monitor or color television.
+4.  IBM PC-compatible digital signal for the IBM PC monochrome monitor.
+
+**LCD Interface**
+
+1.  Dual, one-bit serial driver interface.
+2.  Dual, four-bit parallel driver interface.
+3.  Dual, four-bit, intensity driver interface.
+
+***
+
+## Programming
+
+The operating system in your computer provides the necessary commands for accessing the registers within the 6355 LCDC controller. Note that it is not good programming practice to bypass the operating system by programming specific devices.
+
+The Monitor ROM provides various functions for using the video controller in your computer. With these functions you can cover a full range of capabilities for the device. Additional programming information may be found in the vendor’s data sheets, and the Programmers Utility Pack for your version of MS-DOS.
+
+***
+
+If you would like the remaining content (such as appendices, further technical details, or any other sections from the document), please let me know!
+

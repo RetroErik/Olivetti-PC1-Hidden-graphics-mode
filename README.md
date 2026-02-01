@@ -62,26 +62,42 @@ nasm -f bin colorbar.asm -o colorbar.com
 **Value 0x4A** enables the hidden 16-color mode.
 
 ### Initialization Sequence
+
+**Minimal (required):**
+```asm
+mov al, 0x4A
+out 0xD8, al        ; Enable 16-color mode - THAT'S IT!
 ```
-1. INT 10h, AX=0004h  (Set CGA Mode 4 as baseline)
-2. Set register 0x67 to 0x18 via ports 0xDD/0xDE (8-bit bus mode)
-3. Set register 0x65 to 0x09 via ports 0xDD/0xDE (200 lines, PAL)
-4. Write 0x4A to port 0xD8 (enable 16-color mode)
-5. Set border color via port 0xD9
-6. Write palette: 0x40 to 0xDD, 32 bytes to 0xDE, then 0x80 to 0xDD
+
+**Full sequence (optional steps for specific configurations):**
 ```
+1. INT 10h, AX=0004h  (Optional: Set CGA Mode 4 as baseline)
+2. Set register 0x67 to 0x18 via ports 0xDD/0xDE (Optional: 8-bit bus mode)
+3. Set register 0x65 to 0x09 via ports 0xDD/0xDE (Optional: 200 lines, PAL)
+4. Write 0x4A to port 0xD8 (REQUIRED: enable 16-color mode)
+5. Set border color via port 0xD9 (Optional)
+6. Write palette (Optional - defaults to CGA colors)
+```
+
+> **Note:** Steps 1-3 and 5-6 are optional because the PC1 BIOS defaults are already correct for PAL/CRT operation.
 
 ### Register 0x65 - Monitor Control (Value: 0x09)
 
-- **Bits 0–1:** Vertical lines (01 = 200 lines)
-- **Bit 3:** TV standard (1 = PAL/SECAM, 50Hz)
-- **Bit 4:** Monitor type (0 = Color)
+- **Bits 0–1:** Vertical lines (01 = 200 lines, 00=192, 10=204)
+- **Bit 2:** Horizontal width (0 = 320/640, 1 = 256/512)
+- **Bit 3:** TV standard (1 = PAL/SECAM 50Hz, 0 = NTSC 60Hz)
+- **Bit 4:** Monitor type (0 = CGA color, 1 = MDA monochrome)
+- **Bit 5:** Display type (0 = CRT, 1 = LCD)
+- **Bit 6:** VRAM type (0 = Dynamic RAM, 1 = Static RAM)
+- **Bit 7:** Pointing device (0 = Light-pen, 1 = Mouse)
 
 ### Register 0x67 - Configuration Mode (Value: 0x18)
 
-- **Bit 7:** 16-bit bus mode (0 = 8-bit bus, **MUST be 0 on PC1!**)
-- **Bit 6:** 4-page video RAM (0 = disabled)
+- **Bits 0–2:** Horizontal position adjustment
 - **Bits 3–4:** Display timing/centering
+- **Bit 5:** LCD control signal period
+- **Bit 6:** 4-page video RAM (0 = disabled, PC1 only has 16KB)
+- **Bit 7:** Bus width (0 = 8-bit bus, 1 = 16-bit bus, **MUST be 0 on PC1!**)
 
 ### Color Palette (Registers 0x40–0x5F)
 
@@ -94,6 +110,8 @@ nasm -f bin colorbar.asm -o colorbar.com
 1. Write 0x40 to port 0xDD (enable palette write)
 2. Output 32 bytes (16 colors × 2 bytes) to port 0xDE
 3. Write 0x80 to port 0xDD (disable palette write)
+
+> **⚠️ Important:** You must include I/O delays between each palette byte write (e.g., `jmp short $+2`). The V6355D requires 300ns minimum I/O cycle time. Without delays, palette writes may be corrupted.
 
 ## Memory Layout
 
@@ -112,7 +130,7 @@ Row offset calculation:
 
 ## Documentation
 
-See [DEVELOPMENT_SUMMARY.md](DEVELOPMENT_SUMMARY.md) for detailed technical specifications.
+For comprehensive technical documentation, see [V6355D-Technical-Reference.md](../V6355D-Technical-Reference.md).
 
 ## Compatibility with Other V6355-Based Systems
 
@@ -197,9 +215,11 @@ The 16-color palette mode should work on both systems since it's a feature of th
 
 - **Author:** Dag Erik Hagesæter (Retro Erik)
 - **Special Thanks:**
-  - Simone Riminucci - Demonstrated that this hidden mode was possible
-  - John Elliott - Extensive V6355D documentation
+  - Simone Riminucci - Discovered and demonstrated the hidden mode on real PC1 hardware
+  - John Elliott - V6355D documentation (note: some claims unverified on PC1)
   - GitHub Copilot & Claude - AI-assisted development
+
+**For comprehensive technical documentation, see:** [V6355D-Technical-Reference.md](../V6355D-Technical-Reference.md)
 
 ## License
 

@@ -1,0 +1,1071 @@
+The datasheet for the V6355 Chip:
+
+Certainly! I will present the full text, tables, and schemas from the "V6355 LCDC DATA SHEET" (Yamaha V6355), formatted for readability but without changing any wording. Due to the document’s length, I’ll provide the content in multiple parts. Here is **Part 1**:
+
+***
+
+# V6355 LCDC DATA SHEET
+
+***
+
+## 1. Name:
+
+V6355
+
+## 2. Function:
+
+LCD/CRT Display Controller
+
+## 3. Purpose:
+
+Controls screen display
+
+## 4. Process:
+
+YAMAHA Si-Gate CMOS process
+
+## 5. External Appearance:
+
+100-pin plastic QFP
+
+***
+
+## 6. Electrical Characteristics
+
+### (A) Absolute Maximum Ratings
+
+| Parameter             | Symbol | Minimum | Maximum | Unit |
+| --------------------- | ------ | ------- | ------- | ---- |
+| DC Supply Voltage     | VDD    | -0.5    | +7.0    | V    |
+| DC Input Voltage      | VI     | -0.5    | VDD+0.5 | V    |
+| DC Output Voltage     | Vo     | -0.5    | VDD+0.5 | V    |
+| Operating Temperature | TOP    | 0       | +70     | °C   |
+| Storage Temperature   | TSTG   | -50     | +125    | °C   |
+
+(VSS and AVSS are based on 0.0 V)
+
+***
+
+### (B) Recommended Operating Conditions
+
+| Parameter             | Symbol | Minimum | Typical | Maximum | Unit |
+| --------------------- | ------ | ------- | ------- | ------- | ---- |
+| DC Supply Voltage     | VDD    | 4.75    | 5.0     | 5.25    | V    |
+| Operating Temperature | TOP    | 0       | 25      | 70      | °C   |
+
+(VDD and AVDD are the same voltage, and VSS and AVSS are used as 0.0 V)
+
+***
+
+### (C) D.C. Characteristics
+
+| Parameter                        | Symbol | Condition   | Min.    | Max. | Unit |
+| -------------------------------- | ------ | ----------- | ------- | ---- | ---- |
+| High-Level Output Voltage (TTL)  | VOH    | IOB= -0.4mA | 2.7     | 0.4  | V    |
+| Low-Level Output Voltage (TTL)   | VOL    | IOL= 0.8mA  |         | 0.4  | V    |
+| High-Level Output Voltage (CMOS) | VOU    | IIOHI< 1pA  | VDD-0.4 |      | V    |
+| Low-Level Output Voltage (CMOS)  | VOL    | IIOLI< 1pA  |         | 0.4  | V    |
+| High-Level Input Voltage         | VIH    |             | 2.2     |      | V    |
+| Low-Level Input Voltage          | VIL    |             |         | 0.8  | V    |
+| High-Level Output Current        | IOR    | VOH = 2.7 V | -0.4    |      | mA   |
+| Low-Level Output Current         | IOL    | VOL = 0.4 V |         | 0.8  | mA   |
+| Input Leak Current               | IL     |             | -16     | 10   | μA   |
+| Output Leak Current (Tristate)   | ILZ    |             | -10     | 10   | μA   |
+| Power Supply Current (Operating) | IDD    | RL= 5.6Kohm |         | TO   | mA   |
+| Power Supply Current (Quiescent) | IDD    | RL= 5.6Kohm |         | 50   | mA   |
+| High-Level Clock Input Voltage   | VCH    |             | 3.6     |      | V    |
+| Low-Level Clock Input Voltage    | VCL    |             |         | 0.6  | V    |
+
+VDD and AVDD = 5.0 V ±5%, TOP = 0 to 70 ℃, and the Power Supply Current is the sum of the average levels of terminals VDD and AVDD.  
+RL: A terminating resistor between Y, R, G, B, CH terminals and GND.  
+The Output Leakage Current (Tristate) applies to CD0 to CD7, RDO to RD7, RA2/GD3 to RAO/GDI at input condition; and to ADO to AD12/\*CAS, "LSEL, "HSEL, and MEMRDY when they are at high impedance.
+
+
+***
+
+### (D) A. C. Characteristics (VDD=5.0V ± 5 %, TOP-0-70 °℃)
+
+#### D-1 I/O Register to CPU Interface
+
+**Parameter Table**
+
+| Parameter                          | Symbol | Mi nímum | Maximum | Unit |
+| ---------------------------------- | ------ | -------- | ------- | ---- |
+| Cycle Time                         | tCYC   | 300      |         | ns   |
+| Read/Write Low-Level Pulse Width   | PWL    | 120      |         | ns   |
+| Read/Write High-Level Pulse Width  | PWH    | 120      |         | ns   |
+| Read/Write Rise and Fall Time      | tr, tf | 25       |         | ns   |
+| Address Setup Time                 | tAS    | 40       |         | ns   |
+| Address Hold Time                  | ĽAH    | 10       |         | ns   |
+| Data Setup Time                    | tDS    | 60       |         | ns   |
+| Data Hold Time                     | t DH   | 10       |         | ns   |
+| Data Delay Time                    | tDD    | 100      |         | ns   |
+| Bus Direction Switching Hold Time  | tBH    | 10       |         | ns   |
+| Bus Direction Switching Delay Time | tBD    | 85       |         | ns   |
+
+@CL = 100 pF + 2LSTTL (CD0 to CD7, BDIR)
+
+**Waveform/Schema Labels (as text)**
+
+    - PW'n
+    TOW(Write )
+    - 2.01"
+    IOR (Read )
+    - 1.01
+    IOSEL
+    -2.01
+    - 2.0\\'
+    Com
+    2.01
+    CD .- , (Write)
+    - 1.0V
+    time
+    -2.2V
+    CD .- 1 (Read)
+    - 0.8\\'
+    -2.2V
+    BDIR
+
+***
+
+#### D-2 VRAM - CPU Interface
+
+**Parameter Table**
+
+@CL = 100 pF + 2LSTTL (CD0 to CD7, BDIR, MEMRDY)
+
+| Parameter                          | Symbol | Minimum | Maximum | Unit |
+| ---------------------------------- | ------ | ------- | ------- | ---- |
+| Read/Write High-Level Pulse Width  | PWH    | 50      |         | ns   |
+| Read/Write Rise and Fall Time      | tAS    | 0       |         | ns   |
+| Address Setup Time                 | ĽAH    | 0       |         | ns   |
+| Data Delay Time (During Write)     | t DW   |         |         | ns   |
+| Address Hold Time                  | t HW   | 0       |         | ns   |
+| Data Hold Time (During Read)       | tHR    | 10      |         | ns   |
+| Bus Direction Switching Delay Time | tBD    |         | 80      | ns   |
+| Bus Direction Switching Hold Time  | tBR    | 10      |         | ns   |
+| Ready - Low-Level Delay Time       | tRD    |         | 50      | ns   |
+| Ready - High-Level Hold Time       | tRH    | 10      |         | ns   |
+| Ready - Rise Time                  | tr, tf | 25      |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    PWM-
+    MEMW (Write)-
+    - 2.0V
+
+    MEMR (Read)
+    - 1.0V
+
+    tak
+    LAS
+
+    MEMSEL
+    .2.0V
+
+    A0 -13
+    - 1.0V
+
+    - tos -
+
+    -2.0V
+
+    CD: - 7(Write )
+    1.0V
+    -2.2V
+
+    CD-, (Read)
+    0.8V
+
+    - Las
+
+    High Impeadance
+    High Impeadance
+
+    MEMRDY
+    -- 0.8V
+
+    MEMO
+    (DRAM Only)
+    2.2V
+
+    BDIR
+    -0.sv
+
+***
+
+#### D-3 VRAM - LCDC Interface
+
+(1) **SRAM Mode**  
+(Master Clock = 21.47727 MHZ, CL = 100 pF + 2LSTTL)
+
+**Parameter Table**
+
+| Parameter                                   | Symbol | Minimum | Typical | Unit |
+| ------------------------------------------- | ------ | ------- | ------- | ---- |
+| CCL - Address Setup Time                    | tC-AS  | 150     | 163     | ns   |
+| CCL - Address Hold Time                     | tC-AH  | 0       | 20      | ns   |
+| CCL - Data Setup Time                       | tC-DS  | 0       |         | ns   |
+| CCL - Data Hold Time                        | tC-DH  | 38      | 20      | ns   |
+| \*XA - Address Enable Delay Time            | tXA-AE | 46      | 70      | ns   |
+| \*XA - Data Setup Time (During Read)        | tXA-DS | 50      |         |      |
+| \*XA - Data Hold Time (During Read)         | tXA-DA | 0       |         | ns   |
+| \*WE - \* XA Setup Time (During Write)      | tW-XS  | 23      | 35      | ns   |
+| \*WE - \* XA Hold Time (During Write)       | tW-XH  | 0       | 10      | ns   |
+| \*WE - Low-Level Pulse Width (During Write) | tWL    | 140     | 150     | ns   |
+| \*WE - Data Setup Time (During Write)       | tW-DS  | 70      | 80      | ns   |
+| \*WE - Data Hold Time (During Write)        | tW-DH  | 10      |         | ns   |
+| \*XA Low-Level Pulse Width                  | PWXA   | 210     |         | ns   |
+| Address Disable - \* XA Delay Time          | tAD-XA | 0       |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    CCL
+    - 0.8V
+
+    XA
+    2.2V
+
+    tr - AN
+    tr - AH
+    0.8V
+
+    - Pu xA
+    INA AF
+    2.2V
+
+    ASEL
+    LISEL
+    0.8\\'
+
+    EXA ICH
+
+    RDo 7
+    (Read )}
+
+    1.0V
+
+    WE
+    2.2\\'
+    - 0.8\\'
+    2.0\\'
+
+    L- 2.2V
+    (W'ritel)}
+
+    V
+    1.0V
+    2.2\\'
+
+    XE
+
+    & XH
+
+***
+
+(2) **DRAM Mode**
+
+**Parameter Table**
+
+| Parameter                                   | Symbol | Minimum | Typical | Maximum | Unit |
+| ------------------------------------------- | ------ | ------- | ------- | ------- | ---- |
+| \*RAS Precharge Time                        | tRP    | 98      | 108     |         | ns   |
+| \*RAS Pulse Width                           | TRAS   | 160     | 330     |         | ns   |
+| \*CAS Precharge Time (For Page Cycles Only) | t CPN  | 140     | 160     |         | ns   |
+| t CP                                        |        | 60      | 75      |         | ns   |
+| \*CAS Pulse Width                           | t CAS  | 80      |         |         | ns   |
+| Row Address Setup Time                      | tRAR   | 20      | 30      | 50      | ns   |
+| Row Address Hold Time                       | TASR   | 23      |         |         | ns   |
+| Column Address Setup Time                   | t CAR  | 70      | 120     |         | ns   |
+| Column Address Hold Time                    | t CDS  | 0       |         |         | ns   |
+| \*CAS - Data Setup Time                     | t CDH  | 38      |         |         | ns   |
+| \*XC - Data Setup Time                      | tXCS   | 27      |         |         | ns   |
+| \*XC - Data Hold Time                       | t XCH  | 23      |         |         | ns   |
+| Address Disable - \* XR Delay Time          | tAD-XR | 23      | 45      |         | ns   |
+| \*XC - Address Enable Delay Time            | tXC-AE | 23      | 45      |         | ns   |
+| .\* XR - \* RAS Setup Time                  | t XRS  | 23      | 40      |         | ns   |
+| \*XC - \* RAS Hold Time                     | tXRH   | 10      | 20      |         | ns   |
+| \*XC - \* CAS Setup Time                    | t XCH  | 92      | 105     |         | ns   |
+| \*XC - \* CAS Hold Time                     | tWCS   | 10      | 15      |         | ns   |
+| \*WE - \* CAS Setup Time                    | tWCH   | 46      | 60      |         | ns   |
+| \*WE - \* CAS Hold Time                     | tWP    | 70      | 80      |         | ns   |
+| \*CAS - Data Setup Time (During Write)      | t DS   | 10      |         |         | ns   |
+| \*CAS - Data Hold Time (During Write)       | t DR   | 92      |         |         | ns   |
+| \*RAS - \* XA Delay Time                    | tRXA   | 23      | 45      |         | ns   |
+| \*WE - \* XA Delay Time                     | tWXA   | 23      | 45      |         | su   |
+| \*CAS - \* SEL Delay Time - 1               | tcs1   | 0       | 20      |         | ns   |
+| \*CAS - \* SEL Delay Time - 2               | tcs2   | 23      | 45      |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    XA
+    0.8V
+
+    XR
+    2.2\\'
+    -0.8V
+
+    xc
+    -2.2\\'
+
+    tx **
+
+    1
+    -2.2V
+
+    RAS
+    0.8\\'
+
+    -- 2.2V
+
+    CAS
+    -0.8V
+
+    test
+
+    HSEL
+    -- 2.2V
+
+    LSEL
+    -0.8V
+
+    CASH
+    TRAN
+
+    LAS
+    team
+
+    LAn- Va
+    2.21
+
+    ADo- 1
+    O.8V
+
+    to ImH
+    tim
+
+    RD ,
+    (Read)
+    -1.01
+
+    WE
+    -0.8V
+
+    -LCDS
+
+    RD. ,
+    (Write)
+    2.0V.
+
+    2.2\\'
+    1.0V
+
+    2.0\\'
+
+***
+
+### D-4 GD - LCDC Interface
+
+*(Master Clock = 21.47727 MHZ, CL = 100 PF + 2LSTTL)*
+
+**Parameter Table**
+
+| Paramerer                  | Symbol | Minimum | Typical | Maximum | Unit |
+| -------------------------- | ------ | ------- | ------- | ------- | ---- |
+| CCL - LOAD Delay Time      | tCLD   |         | 180     |         | ns   |
+| RA - LOAD Delay Time       | tRLD   |         | 300     |         | ns   |
+| LOAD - DCK Delay Time      | tLDD   |         | 10      |         | ns   |
+| DCK - LOAD Hold Time       | tDLH   |         | 30      |         | ns   |
+| LOAD - DCK Setup Time      | tLDS   | 25      | 25      |         | ns   |
+| DCK High-Level Pulse Width | tDH    |         | 30      |         | ns   |
+| DCK Low-Level Pulse Width  | tDL    |         | 10      |         | ns   |
+| LOAD Low-Level Pulse Width | tLL    |         | 70      |         | ns   |
+| GD Delay Time              | tGD    |         |         |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    CCL
+    RA. ?
+    - 0 x1
+    LOAD
+    =
+    - 2.21\*
+    DCK
+    2.01
+    X
+    5
+
+***
+
+### D-5 Control Data Interface
+
+*(Master Clock = 21.47727 MHz, CL = 100 PF + 2LSTTL)*
+
+**Parameter Table**
+
+| Parameter                      | Symbol | Minimum | Typical | Maximum | Unit |
+| ------------------------------ | ------ | ------- | ------- | ------- | ---- |
+| Chip Disable - Data Delay Time | t CDD  | 20      | 45      |         | ns   |
+| Data - Chip Enable Delay Time  | tDCE   | 20      | 45      |         | ns   |
+| VSY - Data Setup Time          | tVDS   | 120     | 160     |         | ns   |
+| VSY - Data Hold Time           | tVDH   | 120     | 160     |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    2.2V
+    HSEL
+    LSEL
+    - 2.21
+    RIA. 1
+    (SRAM)
+    2.21
+    VSY /FLMI
+    tvis
+    - tvmm-
+    2.21'
+    RDo 7
+    (DRAM)
+    - 0 8V
+    RAS
+    (DRAM)
+    CAS
+    (DRAM)
+    Note:
+    The dotted lines for *RAS and *CAS are the normal timings. When
+    using the Control Data Interface, "RAS and *CAS remain high.
+
+***
+
+### D-6 LCD Interface
+
+*(Master Clock = 21.47727 MHZ, CL = 100 pF)*  
+*(Capacitive Load Only)*
+
+#### (1) Typ1, Typ3 Modes
+
+**Parameter Table**
+
+| Parameter                      | Symbol | Minimum | Typical | Maximum | Unit |
+| ------------------------------ | ------ | ------- | ------- | ------- | ---- |
+| FLM - LC Setup Time            | FLS    |         | 320     |         | ns   |
+| FLM - LC Hold Time             | tFLH   |         | 320     |         | ns   |
+| LC High-Level Pulse Width      | tLE    |         | 320     |         | ns   |
+| LC - SCK Delay Time            | tLSD   |         | 8       |         | ns   |
+| SCK - LC Delay Time            | DSS    |         | 50      |         | ns   |
+| Data - SCK Setup Time          | t DSH  | 50      | 50      |         | ns   |
+| LC and SCK Rise and Fall Times | tr, tf |         | 50      |         | ns   |
+| SCK Low-Level Pulse Width      | tSL    |         | 50      |         | ns   |
+| SCK Cycle Time                 | tsc    |         | 180     |         | ns   |
+| EWCK, M Delay Times            | tD     |         | 50      |         | ns   |
+| Data - SCK Hold Time           | tSLD   |         | 400     |         | ns   |
+| SCK High-Level Pulse Width     | tSH    |         | 50      |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    LD 7
+    -0.xV
+    Isın
+    ting
+    V'an O.AV'
+    - 0.8V
+    SCK -
+    tı.M
+    - V'an 0.8\'
+    O.RV
+    LC
+    - Vioo O.RV
+    FLMI.1
+    EWCK
+    n.RV .
+    V= 0.8\'
+    M
+    - O.RV
+
+***
+
+#### (2) Typ2 Mode
+
+**Parameter Table**
+
+| Parameter                            | Symbol | Min. | Typical | Max. | Unit |
+| ------------------------------------ | ------ | ---- | ------- | ---- | ---- |
+| FLM - LC Setup Time                  | tFLS   |      | 320     |      | ns   |
+| FLM - LC Hold Time                   | tFLH   |      | 320     |      | ns   |
+| LC High-Level Pulse Width            | tLH    |      | 320     |      | ns   |
+| LC - SCK Delay Time                  | tSLD   | 8    | 500     |      | ps   |
+| SCK - LC Delay Time                  | tDSS   |      | 140     |      | ns   |
+| Data - SCK Setup Time                | tDSH   |      | 140     |      | ns   |
+| Data - SCK Hold Time                 | tSH    |      | 320     |      | ns   |
+| LC, SCK and EWCK Rise and Fall Times | tr, tf | 50   |         |      | ns   |
+| SCK High-Level Pulse Width           | tSL    |      | 320     |      | ns   |
+| SCK Low-Level Pulse Width            | tsc    |      | 740     |      | ns   |
+| EWCK Setup Time                      | tES    |      | 140     |      | ns   |
+| EWCK Hold Time                       | tER    |      | 140     |      | ns   |
+| EWCK High-Level Pulse Width          | tEWH   |      | 140     |      | ns'  |
+| M Delay Time                         | tD     |      | 50      |      | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    L.D. :
+    XX
+    · Vre, 0.8V
+    0.8V
+    time
+    toss-
+    tsi ..
+    SCK
+    Von-0.8V
+    ts1.
+    - t&c
+    - Vm-0.8V
+    FLMI.1.
+    - tım
+    Vim-0.8\'
+    LC
+    t\+H
+    ILES
+    Vin-O.BV
+    EWCK
+    - Vim-0.8\'
+    M
+
+***
+
+### D-7 CRT Interface
+
+*(Master Clock = 21.47727 MHZ, CL = 100 pF)*
+
+#### Color Monitor (IBM Color Monitor, Linear RGB Monitor)
+
+**Parameter Table**
+
+| Symbol  | Minimum | Typical | Maximum | Unit                |
+| ------- | ------- | ------- | ------- | ------------------- |
+| t HW    | 4.5     | 5.2     |         | ps                  |
+| tHLD    | 4.1     | 8.4     |         | us                  |
+| tLW     | 3.9     | 8.4     |         | με                  |
+| tRW     | 3.9     | 8.4     |         | με                  |
+| tRHD    | 1.5     |         | 44.7    | ps                  |
+| tHDW    | 35.7    |         | 63.695  | HSY Interval (t PH) |
+| tVTD    | 1.4     | 1.8     |         | ms                  |
+| tBW     | 1.3     | 64      | 13.0    | ms                  |
+| tVDW    | 12.2    |         | 196     | με                  |
+| tVYW    | 1019    |         |         | ps                  |
+| tYTD    | 764     |         |         | ps                  |
+| tr, tfl |         | 50      |         | ns                  |
+
+*(Above table preserves the mixed units and labels as in source extraction.)*
+
+**Waveform/Schema Labels (as text)**
+
+    - 2.21'
+    - 0.x1.
+    HSY
+    tan
+    ton.
+    -
+    2.2V
+    -0.8V
+    DI-DB
+    - tHim
+    2.2\'
+    -0.8V
+    EWCK
+    Notes: The timings for the R, G, and B outputs for a Linear RGB
+    Monitor are the same as for DI to DB. The outputs, however,
+    (offset voltage and amplitude) differ from DI and DB.
+    The Border width and Display Enable Timing width depend on the
+    number of dots displayed.
+    For a PAL format, the VSP cycles are 20.0 ms, the Top Border time
+    is increased by 1.7 ms, and the Bottom Border is increased by 1.5
+    ms.
+
+***
+
+#### (2) IBM Monochrome Monitor
+
+**Parameter Table**
+
+| Parameter                       | Symbol | Minimum | Typical | Maximum | Unit |
+| ------------------------------- | ------ | ------- | ------- | ------- | ---- |
+| HSY High-Level Pulse Width      | tHW    |         | 8.9     |         | με   |
+| HSY - Left Border Delay Time    | tHLD   | -0.90   | 0.12    |         |      |
+| Left Border width               | tLW    | 0.55    | 5.03    |         | με   |
+| Right Border width              | tRW    | 0.55    | 5.03    |         | με   |
+| Right Border - HSY Delay Time   | tRHD   | -0.12   | 0.90    |         | ps   |
+| Horizontal Display Timing width | tHDW   | 35.8    | 44.7    |         | ps   |
+| BSY Interval                    | t PH   | 54.76   | 20.04   |         | ps   |
+| VSY Interval                    | tPV    |         |         |         | ms   |
+| Top Border width                | tIW    | 4.3     | 4.5     |         | ms   |
+| Bottom Border width             | tBW    | 3.7     | 4.2     |         | ms   |
+| Vertical Display Timing width   | tVDW   | 10.5    | 11.2    |         | ms   |
+| VSY High-Level Pulse Width      | tVYW   |         | 876     |         |      |
+| VST High-Level Pulse Width      | tV'TW  |         | 876     |         |      |
+| Video Output Rise, Fall Times   | tr, tf |         | 50      |         | ns   |
+
+**Waveform/Schema Labels (as text)**
+
+    2.2\'
+    HSY
+    -2.2V
+    DI DR
+    2.2\'
+    -0.R\'
+    EWCK.
+    VST
+    DI DB-
+    -
+    FWCK
+    Note: DI to DB and EWCK are at the low Level when near HSY.
+
+***
+
+#### (3) Linear RGB Output Level (RL = 5.6 kOhms)
+
+**Parameter Table**
+
+| Parameter         | Symbol | Minimum | Typical | Maximum | Unit |
+| ----------------- | ------ | ------- | ------- | ------- | ---- |
+| Offset Voltage    | VO     | 1.1     | 1.3     | 1.7     | V    |
+| Maximum Amplitude | VA     | 1.3     | 1.45    | 1.6     | V    |
+| Step Voltage      | VS     | 0.14    | 0.21    | 0.27    | V    |
+| VP-P              |        |         |         |         | V    |
+
+Notes: RL is a terminating resistor between the R, G, and B terminals and GND.
+
+***
+
+#### (4) Composite Monitor (Terminating resistor for Y and CH = 5.6 kOhms)
+
+**Parameter Table**
+
+| Parameter                            | Symbol | Minimum | Typical | Maximum | Unit |
+| ------------------------------------ | ------ | ------- | ------- | ------- | ---- |
+| BSY Pulse Width                      | tHW    | 4.5     | 1.3     |         | με   |
+| Color Burst width                    | tCBW   |         | 2.7     |         | με   |
+| Color Burst - Left Border Delay Time | t CLD  | 0.6     | 1.2     |         | ps   |
+| Left Border width                    | tLW    | 3.9     | 8.4     |         | ps   |
+| Right Border width                   | tRW    | 3.9     | 8.4     |         | ps   |
+| Right Border - BSY Delay Time        | tRHD   | 1.7     | 2.8     |         |      |
+| Horizontal Display Timing width      | tHDW   | 35.7    | 44.7    |         | με   |
+| HSY - Color Burst Delay Time         | tHCD   | 0.8     |         |         | με   |
+| VSY - Top Border Delay Time          | tVTP   |         | 764     |         | ps   |
+| VSY Interval                         | t PV   | 16.688  |         |         | ms   |
+| Vertical Display Timing width        | tVDW   | 12.2    |         |         | με   |
+| VSY Pulse Width                      | tVYW   | 196     |         |         | με   |
+| Blanking Level                       | VBL    | 1.2     | 1.5     | 1.9     | V    |
+| (Black Level) - (Blanking Level)     | VB     | 70      | 85      | 100     | mV   |
+| (SYNC Level) - (Blanking Level)      | VS     | -0.35   | -0.38   | -0.42   | V    |
+| (White Level) - (Black Level)        | V      | 1.65    | 1.95    | 2.35    | V    |
+| Burst + Side Level                   | V+     | 0.26    | 0.29    | 0.33    | V    |
+| Burst - Side Level                   | v-     | -0.26   | -0.29   | -0.33   | V    |
+| CH + Side Maximum                    | C+     | 0.65    | 0.7     | 0.76    | V    |
+| CH - Side Maximum                    | c-     | -0.67   | -0.72   | -0.78   | V    |
+| CH Offset Level                      | Vu     | 0.99    | 1.05    | 1.12    | V    |
+| WHITE                                |        |         |         |         |      |
+| BLACK                                |        |         |         |         |      |
+
+Notes: The White level is when the RGB = 777, and the maximum amplitude of CH is when RGB = 770.
+
+**Schema/labels (as text)**
+
+    WHITE
+    Vu
+    BLACK
+    ·tra
+    trwa
+    v.
+    · V
+    TTM
+    V
+    -
+    VÝMI
+    I
+    με
+
+***
+
+### D-8 Clock
+
+#### (1) External Clock
+
+**Parameter Table**
+
+| Parameter                    | Symbol | Minimum | Typical  | Maximum | unit |
+| ---------------------------- | ------ | ------- | -------- | ------- | ---- |
+| Clock Frequency              | fc     | 18.6    | 21.47727 | 52.5    | MHZ  |
+| Clock Rise and Fall Time     | tr, tf |         | 6        |         | ns   |
+| Clock Duty                   | Duty   |         | 50       | 47.5    | %    |
+| Duty = tH × 100% / (tH + tL) |        |         | 1.00     |         |      |
+
+Notes: An external clock is input through the X1 terminal. The x2 terminal will not be connected (N. C.).
+
+#### (2) Internal Clock
+
+**Parameter Table**
+
+| Parameter                   | Symbol | Minimum | Typical  | Maximum | Unit |
+| --------------------------- | ------ | ------- | -------- | ------- | ---- |
+| Clock Oscillation Frequency | foSC   |         | 21.47727 |         | MHZ  |
+
+Using a 21.47727 MHz crystal
+
+*   36PF  
+    11₺. 56pF  
+    5.6K
+
+#### (3) Terminal Capacities
+
+**Parameter Table**
+
+| Parameter             | Symbol | Condition  | Minimum | Maximum | Unit |
+| --------------------- | ------ | ---------- | ------- | ------- | ---- |
+| Input Terminal        | CI     | Non-loaded | 8       |         | PF   |
+| Output Terminal       | CO     | Non-loaded | 10      |         | PF   |
+| Input/Output Terminal | CI/O   |            | 12      |         | PF   |
+| Output Load Capacity  | CL     |            |         | 100     | PF   |
+
+***
+
+
+## 7. External View
+
+P-0.65TYR 100- 0.3: 0.1  
+0.15 $ 0.05  
+2.15  
+20.0:0.2  
+24.3+0.4  
+(21.91  
+2.15  
+14.0±0.2  
+2.15  
+18.3+0.4  
+0.9+0.2  
+1.95 + 0.2  
+0.1±0.05  
+PKG. Bottom of package  
+(15.9)  
+Scale : mm
+
+Notes: The specifications of this product are subject to change for improvement without notice.
+
+2.15
+
+***
+
+## 8. Pin Diagram
+
+ASEL
+
+*   LESFC  
+    " ADu/RAS  
+    13 ADN/XC  
+    N At /XR
+
+# NC
+
+O AD-  
+N AM
+
+# NC
+
+M Ark  
+US AD.  
+M ADI  
+M AD.  
+02 AD.  
+NC
+--
+
+» N.C  
+DCK  
+1 A:  
+LOAD  
+N AI  
+RA.D.  
+75 A-  
+RA .. GU  
+M NC  
+NC  
+73 N.C  
+.  
+71 DIG .LD.  
+N.C  
+N DR.LD  
+N.C  
+11  
+DI'LD.  
+GD  
+@ NC  
+MY.  
+67 N.C  
+MY,  
+& N.C  
+MX1  
+IS  
+(TOP VIEW)  
+05 X:  
+MX,  
+\\'SY 'FLM.  
+17  
+VST/FLM.  
+\[SW MS.  
+HSY LC  
+& LDT/MS.  
+EWCK  
+60 MEMRDY  
+SCK  
+SO MEMIS  
+RESET  
+Se MEMR  
+TOR  
+57 MEMSEL  
+TO  
+44 BDIR  
+TOSEL  
+SS AV'n  
+N.C  
+M CH/M  
+N.C  
+63 N.C  
+CD  
+&2 Y/LD.  
+CD  
+SI R/LD.  
+CDI  
+N.C  
+CD,  
+CD.  
+D  
+CD  
+CD:  
+RD.  
+RDI  
+RD.  
+Vw  
+RD.  
+RD.  
+RD  
+AV.s  
+BILD  
+N.C  
+N.C  
+G/LDI  
+58
+
+***
+
+## 9. Block Diagram
+
+SEL  
+USEC  
+PCK  
+LOAD  
+CCL  
+LSW  
+MY1.MX: RA? ·  
+AD- 12  
+PLA  
+LPen  
+Int.  
+MOUSE  
+Int.  
+Address Multiplex  
+Timing  
+Generator  
+Rez.Adr  
+Counter  
+Clock  
+Decnder  
+Vertical  
+Counter  
+Refresh-Address  
+Comter  
+CMP  
+Text.Cur  
+Control  
+CMP  
+BDIR  
+Horizontal  
+Counter  
+REGISTER  
+ARRAY  
+CPU  
+Int.  
+CUS-CUR  
+H.V Loc.  
+Status  
+Start  
+Address  
+Curane  
+Address  
+Cursor  
+Start &  
+End  
+Monitor  
+PLA  
+CK. Pm  
+Adjust  
+LCD  
+Select  
+CUS-CUR  
+Pattern  
+CUS.CUR  
+Color &  
+Control  
+Color  
+Palette  
+Color  
+MODE 'ID  
+Control  
+Latch  
+MODE.  
+Sel.  
+VSY  
+UST  
+HSY  
+EWCK  
+SCK  
+Sync.  
+Gen.  
+RD. .  
+Luminance  
+Gen.  
+Chrominanc  
+Gen.  
+Cur-Cur  
+Control  
+Color  
+Encoder  
+GD  
+LCD  
+Int.  
+LCD  
+Intensity  
+Control  
+DI-DR  
+R.B  
+Y  
+CH  
+Sel  
+DAC  
+RESET Vs. Vin  
+S. AVIM
+-------
+
+LPen or  
+Mouse  
+Cmmter  
+Monitor  
+MROY
+
+***
+
+## 10. Pins and their functions
+
+| Signal Name | Pin No. | I/O | Function                                                                              |
+| ----------- | ------- | --- | ------------------------------------------------------------------------------------- |
+| \*IOR       | 23      | I   | Controls Read from the I/O Registers, Active low                                      |
+| \*IOR       | 24      | I   | Controls Write to the 1/0 Registers, Active low                                       |
+| \*IOSEL     | 25      | I   | Decode signal for upper bit of address signal of the I/O Registers, Selected when low |
+| A0          | 75      | I   | I/O Register Address Signal                                                           |
+| Al          | 76      | I   | I/O Register Address Signal                                                           |
+| A2          | 77      | I   | I/O Register Address Signal                                                           |
+| A4          | 78      | I   | I/O Register Address Signal                                                           |
+| \*MEMSEL    | 57      | I   | Decode signal of memory addresses, Selected when low                                  |
+| \*MEMR      | 58      | I   | Controls Read from memory, Active low                                                 |
+| \*MEMW      | 59      | I   | Controls Write to memory, Active low                                                  |
+| MEMRDY      | 60      | O   | Memory (VRAM) address ready signal, Busy when low                                     |
+| \*WE        | 100     |     | Memory Write Enable                                                                   |
+| BDIR        | 56      |     | Controls the (CPU Data Bus) Bidirectional Buffer                                      |
+| RESET       | 22      | I   | Reset Signal                                                                          |
+| CD0         | 28      | I/O | Data bus for CPU                                                                      |
+| CD1         | 29      | I/O | Data bus for CPU                                                                      |
+| CD2         | 30      | I/O | Data bus for CPU                                                                      |
+| CD3         | 32      | I/O | Data bus for CPU                                                                      |
+| CD4         | 33      | I/O | Data bus for CPU                                                                      |
+| CD5         | 34      | I/O | Data bus for CPU                                                                      |
+| CD6         | 35      | I/O | Data bus for CPU                                                                      |
+| CD7         | 36      | I/O | Data bus for CPU                                                                      |
+| RDO         | 37      | I/O | VRAM Data bus                                                                         |
+| RD1         | 38      | I/O | VRAM Data bus                                                                         |
+| RD2         | 39      | I/O | VRAM Data bus                                                                         |
+| RD3         | 41      | I/O | VRAM Data bus                                                                         |
+| RD4         | 42      | I/O | VRAM Data bus                                                                         |
+| RD5         | 43      | I/O | VRAM Data bus                                                                         |
+| RD6         | 44      | I/O | VRAM Data bus                                                                         |
+| RD7         | 45      | I/O | VRAM Data bus                                                                         |
+| ADO         | 82      |     | VRAM Address                                                                          |
+| AD1         | 83      |     | VRAM Address                                                                          |
+| AD2         | 84      |     | VRAM Address                                                                          |
+| AD3         | 85      |     | VRAM Address                                                                          |
+| AD4         | 86      |     | VRAM Address                                                                          |
+| AD5         | 88      |     | VRAM Address                                                                          |
+| AD6         | 89      |     | VRAM Address                                                                          |
+| AD7         | 91      |     | VRAM Address                                                                          |
+| AD8/ \*MEMO | 93      | O   | VRAM Address                                                                          |
+| AD9/\*XR    | 94      | O   | VRAM Address                                                                          |
+| AD10/\*XC   | 95      | O   | VRAM Address                                                                          |
+| AD11/\*RAS  | 96      | O   | VRAM Address                                                                          |
+| AD12/\*CAS  | 97      | O   | VRAM Address                                                                          |
+| \*XB        | 81      | O   | Memory Read/Write Data Enable                                                         |
+| \*XA        | 82      | O   | Memory Read/Write Timing (CPU Address Enable for SRAM)                                |
+| \*L SEL     | 98      | O   | Selects 1st 8K bytes                                                                  |
+| \*H SEL     | 99      | O   | Selects 2nd 8K bytes                                                                  |
+| ...         | ...     | ... | ...                                                                                   |
+
+*(The table continues with all pins as in the original document.)*
+
+***
+
+
+| Signal Name | Pin No. | I/O | Function                                                               |
+| ----------- | ------- | --- | ---------------------------------------------------------------------- |
+| AD8/ \*MEMO | 93      | O   | VRAM Address                                                           |
+| AD9/\*XR    | 94      | O   | VRAM Address                                                           |
+| AD10/\*XC   | 95      | O   | VRAM Address                                                           |
+| AD11/\*RAS  | 96      | O   | VRAM Address                                                           |
+| AD12/\*CAS  | 97      | O   | VRAM Address                                                           |
+| \*XB        | 81      | O   | Memory Read/Write Data Enable                                          |
+| \*XA        | 82      | O   | Memory Read/Write Timing (CPU Address Enable for SRAM)                 |
+| \*L SEL     | 98      | O   | Selects 1st 8K bytes                                                   |
+| \*H SEL     | 99      | O   | Selects 2nd 8K bytes                                                   |
+| RA2/GD3     | 5       | I/O | Raster Address (Output) / Dot data for Character Display               |
+| RA1/GD2     | 6       | I/O | Raster Address (Output) / Dot data for Character Display               |
+| RA0/GD1     | 8       | I/O | Raster Address (Output) / Dot data for Character Display               |
+| GDO         | 12      | I   | Dot data for Character Display                                         |
+| VSY/FLML    | 17      | O   | Vertical Synchronize Signal / FLM of lower block                       |
+| VST/FLMU    | 18      | O   | Vertical Retrace Timing / FLM of upper block                           |
+| HSY/LC      | 19      | O   | Horizontal Synchronize Signal / Latch Clock                            |
+| EWCK        | 20      | O   | Display Active Timing / Driver Enable Signal or Multiple-Weight Signal |
+| SCK         | 21      | O   | Shift Clock                                                            |
+| CH/M        | 54      | O   | Chrominance Signal                                                     |
+| Y/LD3       | 52      | O   | Intensity (Black/White Composite) Signal / Linear RGB Output           |
+| R/LD2       | 51      | O   | Linear RGB Output                                                      |
+| G/LD1       | 50      | O   | Linear RGB Output                                                      |
+| B/LD0       | 47      | O   | Linear RGB Output                                                      |
+| DI/LD7      | 69      | O   | IBM Monitor Output / Lower Block Output Data                           |
+| DR/LD6      | 70      | O   | IBM Monitor Output / Lower Block Output Data                           |
+| DG/LD5      | 71      | O   | IBM Monitor Output / Lower Block Output Data                           |
+| DB/LD4      | 72      | O   | IBM Monitor Output / Lower Block Output Data                           |
+| DCK         | 2       | O   | Dot Shift Clock (For PS)                                               |
+| CCL         | 3       | O   | VRAM Data Latch Clock                                                  |
+| \*LOAD      | 4       | O   | P/S Load Signal                                                        |
+| MY1         | 13      | I   | Mouse Y-direction Rotational Pulse                                     |
+| MY2         | 14      | I   | Mouse Y-direction Rotational Pulse                                     |
+| MX1         | 15      | I   | Mouse X-direction Rotational Pulse                                     |
+| MX2         | 16      | I   | Mouse X-direction Rotational Pulse                                     |
+| \*LDT/\*MS1 | 61      | I   | Lightpen Detect Signal or Mouse Switch Signal                          |
+| \*LSW/\*MS0 | 62      | I   | Lightpen or Mouse Switch Signal                                        |
+| X1          | 64      | I   | Crystal Oscillator, External Clock Input to X1                         |
+| X2          | 65      | O   | Crystal Oscillator Output                                              |
+| AVSS        | 46      | I   | 0 V Power for Analog circuits (DAC)                                    |
+| AVDD        | 55      | I   | +5 V Power for Analog circuits                                         |
+| VSS         | 63      | I   | 0 V Power for Digital circuits                                         |
+| VDD         | 40      | I   | +5 V Power for Digital circuits                                        |
+| VDD         | 90      | I   | +5 V Power for Digital circuits                                        |
+| VSS         | 9       | I   | 0 V Power for Digital circuits                                         |
+
+***
+
+If you need the full pin table in a downloadable format or want any other section of the datasheet, just let me know!

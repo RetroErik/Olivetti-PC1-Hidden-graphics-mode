@@ -1,0 +1,479 @@
+ACV-1030 Color Graphics/Adaptor
+[This is my transcription of the manual supplied with the ACV-1030 graphics card. My notes in square brackets.]
+
+Contents
+Section 1. General Description
+Section 2. Instrallation
+Tool Requirements
+Preliminary steps
+Opening The Computer
+Making Room For the Adapter
+Installing The Adapter
+System Board Switch Settings
+Closing The Computer
+Section 3. Operation
+Specification
+Programming Considerations
+Register Descriptions
+6845 Recommended Parameters
+Appendix A: Connector Specification
+Appendix B: Optional Monochrome Mode
+Appendix C: Program to switch from Color to Monochrome Mode
+Appendix D: Switch Settings
+Appendix E: The CGA Lay-out Displacement
+Section 1. General Description
+The CGA is a display board for IBM PC/XT/AT or compatible computers.
+
+The LSI (V6355) on the board provides the same programming capability as 6845.
+
+It offers the IBM standard graphics resolutions of 320×200 with four colors or 640×200 black & white with any IBM compatible RGB or composite monitor. Furthermore, it occupies a short slot thus save the valuable full size slot for you to install more complex expansion boards.
+
+A composite video adapter, RF modulator, and light pen interface are standard for the CGA CARD.
+
+This adapter can be configured to monochrome mode using ordinary IBM compatible monochrome monitors. Please see Appendix C. for details.
+
+The board is completely software and hardware compatible with IBM Personal Computer and was designed for performance and reliability. It has been constructed of high quality components and designed for minimum power consumption.
+
+Section 2. Installation
+2.1 Tool Requirements
+To install this adapter, you need a medium size flat blade screwdriver, a 3/16" nutdriver, or a 3/16" wrench. A medium size screwdriver will be useful.
+
+2.2 Preliminary Steps
+Turn off all peripheral devices connected to the copmuter .
+Turn off the computer.
+Disconnect all cables from the rear of the computer. Be sure to write down the proper connections first to prevent mistakes when you connect later.
+Put the computer on a suitable work place.
+2.3 Opening The Computer
+Turn the computer so that its back faces you.
+Loosen the 5 cover mounting screws with the screwdriver or nutdriver, as show in the figure below.
+Carefully slide the computer cover forward. When the cover goes to the end, tilt it up as shown in the figure below and lift it away from the computer.
+2.4 Making Room For The Adapter
+System expansion slots are located on the left size of the computer system board. You can refer the situation of other add-on boards to know the correct place.
+Remove the screw that holds the system expansion slot cover to the rear panel and set it aside. Store the cover for possible later use.
+Select an unused expansion slot to hold the Adapter. Any slot will work. To reserve your future expadability , we suggest you using a short slot near the power supply. For PC-AT users, please use one of the two 62-pin slot only.
+2.5 Installing The Adapter
+Hold the Adapter by its top corners and slide it into the computer.
+Firmly press the card's expansion slot connector into the system expansion 62 pin edge connector.
+Align the hole on the top of the card's retaining bracket with the threaded hole on the lip of the computer system rear panel. Insert the screw that you removed with the system expansion slot cover and tighten it.
+2.6 System Board Switch Settings
+Set the display mode to color type on your computer system board. Please refer your computer system manual for information.
+2.7 Closing The Computer
+Hold the computer cover so that it tilts down in back. Slip upper rear edge of the cover over the top of the computer chassis front panel.
+Lower the cover to the horizontal position.
+Carefully slide the cover back over the computer. Be sure that the tracks along the bottom of the cover engage the rails on each side of the computer chassis.
+Tighten the 5 mounting screws that hold the cover onto the computer chassis.
+Reconnect the keyboard and peripheral cables to the computer.
+Reconnect all power cables to the wall socket.
+Section 3. Operation
+3.1 Specification
+Followings are the general specificaion of the features on the Adapter:
+
+1  Display Buffer
+   B8000-BBFFF (16K Buffer) (Color/Graphic)
+   B0000-B3FFF (16K Buffer) (Monochrome)
+
+2  I/O Ports
+   (Out)     03D0 : 6845 Index Register
+   (In/Out)  03D1 : 6845 Data Register
+   (Out)     03D2 : 6845 Index Register
+   (In/Out)  03D3 : 6845 Data Register
+   (Out)     03D4 : 6845 Index Register (IBM Recommended)
+   (In/Out)  03D5 : 6845 Data Register  (IBM Recommended)
+   (Out)     03D6 : 6845 Index Register
+   (In/Out)  03D7 : 6845 Data Register
+   (Out)     03D8 : Mode Control Port
+   (Out)     03D9 : Color Select Port
+   (In)      03DA : Status Port
+   (Out)     03DB : Clear Light Pen Latch
+   (Out)     03DC : Preset Light Pen Latch
+   (In/Out)  03DD : Register Bank Address
+   (In/Out)  03DE : Register Bank Data
+   (In/Out)  03DF : Display Page
+3.2 Programming Considerations
+The Color Graphics function is a powerful tool. Exercise caution when programming it until you are familiar with its features. It is possible to damage the monitor with improper programming. Pay particular attention to the warning in the section "Display Mode Control Port".
+
+A. Interfacing The Color Card
+1. Display Interface
+Interface to the display is done via the following input/output ports which are discussed in detail below:
+
+03D4  6845 Index Register
+03D5  6845 Data Register
+03D8  Display Mode Control Port
+03D9  Color Set Port
+03DA  Display Status Port
+a. 6845 Index and Data Registers (03D4/03D5)
+The 6845 controls the frequencies for the display and the width and height of the screen. There are 16 parameters that govern the display. They are loaded into the 6845 one by one via a single input/output port. Another output port is used to specify which parameter will be loaded next. These two ports are said to be interfacing with the 6845 Data and Index Registers respecitvely.
+
+Description of Parameters
+
+Index  Data
+10     First scan where the cursor will overlay a character.
+11     Last scan where the cursor will overlay a character.
+12     Offset of first byte to be displayed (H).
+13     Offset of first byte to be displayed (L).
+14     Offset of the cursor position in the display buffer (H).
+15     Offset of the cursor position in the display buffer (L).
+16     Offset into the buffer when lightpen tripped (H).
+17     Offset into the buffer when lighten  tripped (L).
+b. Display Mode Control Port (03D8)
+This output port sets the mode of operation for the Color Card.
+
+Bit  Options
+
+0    0=40 by 25 text
+     1=80 by 25 text
+
+1    0=text mode (power on reset)
+     1=graphics mode
+     (Note: The 6845 has to be reprogrammed whenever this bit changes value.)
+
+2    0=enable color (power on reset)
+     1=supress color
+
+3    0=blank the screen (power on reset)
+     1=activate the screen
+     (This bit is useful when changing modes. By keeping the screen blank for
+     a period time, the change from text to graphics modes can be done without
+     any screen bounce.)
+
+4    0=select 320 by 200 when bit 1 equals 1 (power on reset)
+     1=select 640 by 200 when bit 1 equals 1.
+
+5    0=turn off the text blinker (power on reset)
+     1=turn on the text blinker
+     (The blinker has no effect on the cursor. Every character whose 
+     attribute indicates blinking, will now blink)
+
+6    Select between (160×200 or 640×200) × 16 colors graphics modes and others. 
+     When "1", this bit selects 16 colors graphics modes and the resolution are
+     selected by bit 4.
+
+7    Always be kept "0".
+program the Display Mode Control Port bit 1, and
+program the 6845 with the proper parameters.
+When you switch between text and graphics modes, your monitor is subjected to some undefined horizontal and vertical frequencies. For this reason we suggest that you do not use high level languages to control the Display Mode Control Port bit 1. (This does not include memory access which can be done in any language.)
+
+c. Color Select Port (03D9)
+This output port selects graphics background/text border color and graphics intensity and blue mixture.
+
+
+    Bit     Options
+    0       B mixture in graphics
+            background / text border
+
+    1       G mixture in graphics
+            background / text border
+
+    2       R mixture in graphics
+            background / text border
+
+    3       I mixture in graphics
+            background / text border
+
+    4       Graphics I
+
+    5       Graphics B mixture
+Aboves are all in 320 by 200.
+
+d. Display Status (03DA)
+This input port is used to sense the real time status of the display.
+
+
+    Bit     Conditions
+    0       0=display active
+            1=retrace periods (vertical or horizontal)
+
+    1       light pen flip flop output
+
+    2       Remote light pen switch sensor:
+            0=make
+            1=break
+
+    3       0=dots off
+            1=vertical retrace
+Monitor Control Register Bank Address/Data
+This is a 8 bit write-only register, its address is hex 65 within the Register Bank.
+
+The following is a description of the monitor control registers function.
+
+    Bit     Name      Function
+
+     0      SCR0      Select screen vertical line number
+     1      SCR1      The same as bit 0 
+     2      512/256   Select screen horizontal dot number
+     3      PAL       Select PAL SESAM/NTSC
+     4      MONO      Select monochrome/color monitor
+     5                Always write 0
+     6                Always write 0
+     7                Always write 0
+Bit 0, 1 These bits select the screen vertical line number. They should be programmed as below:
+
+    SCR
+    0   1   Vertical line number
+  
+    0   0   192
+    0   1   200
+    1   0   204
+    1   1   Reserved
+Bit 2 Selects the screen horizontal dot number. It should be programmed as below:
+
+   Bit 2    Horizontal dot number
+
+       0    640 or 320
+       1    512 or 256
+Bit 3 Selects television type between PAL/SECAM mode and NTSC mode. 1 selects PAL/SECAM.
+
+Bit 4 Selects monitor, which can be connected to this controller output, between color monitor and PC compatible monochrome monitor.
+
+B. How the Colors are Generated
+Each color you see on the screen is a "mixture" of 3 primary colors (red, green and blue) together with an intensity control. The Color Card allows a program to control the mixture of these 4 components for each dot with varying degrees of freedom from mode to mode. the IRGB mixture of each dot called to "color code" is stored in the screen buffer, again with a different translation table for each mode of operation. Standard color monitors are made to produce color according to the following table (where 0 and 1 denote the absence and presence, respectively, of each primary color.)
+
+    I  R  G  B   Mixed Color
+
+    0  0  0  0   Black
+    0  0  0  1   Blue  
+    0  0  1  0   Green
+    0  0  1  1   Cyan
+    0  1  0  0   Red
+    0  1  0  1   Magenta
+    0  1  1  0   Brown
+    0  1  1  1   White
+    1  0  0  0   Gray
+    1  0  0  1   Light Blue
+    1  0  1  0   Light Green
+    1  0  1  1   Light Cyan
+    1  1  0  0   Light Red
+    1  1  0  1   Light Magenta
+    1  1  1  0   Yellow
+    1  1  1  1   Bright White
+In text mode, the color code for the foreground and background dots of each character is stored as the attribute code.
+
+In 320 by 200 graphics mode, the color code of each dot is composed of the RG mixture from the screen buffer. The IB is predefined using the Color Select Port(03D9). However, when the RG mixture of a dot is 00, the graphics background/text border defined in the Color Select Port is substituted for the color code that would have logically resulted.
+
+In 640 by 200 graphics mode, the color code is predefined using the Color Select Port with the combined on/off information stored in the screen buffer.
+
+Finally, if the color suppression bit (bit 2 of the Display Mode Control Port) is 1, the B mixture will equal the G mixture regardless of the predefined value in all modes.
+
+C. How the Dots are Generated: Text
+In text mode, the display buffer is used to store the character codes and the attribute codes for displayed characters. The actual characters are formed on the screen using outlines from the character generator and colored according to the attribute codes.
+
+Attribute codes:
+
+    7  6  5  4  3  2  1  0
+    I  R  G  B  I  R  G  B (Blinker off)
+
+    BACKGND     FOREGND
+    COLOR       COLOR
+    CODE        CODE
+
+    I  R  G  B  I  R  G  B (Blinker off)
+
+    BACKGND     FOREGND
+    COLOR       COLOR
+    CODE        CODE
+
+    b=0 for stable foreground
+    b=1 for blinking foreground
+    (Background I always set to 0)
+[JCE: The manual seems to have two copies of the (Blinker off) attributes and no copies of the (Blinker on) attributes. The latter should read "b R G B I R G B" ]
+
+All the even address bytes contain the character codes with the next odd byte being their attributes. The 6845 can be programmed to display a full screen of characters starting from any even address (which will be the upper-leftmost character). After the programmed number of displayed characters per line (40 or 80), the next address becomes the first character of the next line.
+
+D. How the Dots are Generated: 320 by 200 Four Color Graphics
+Each byte in the display buffer stores partial color codes (precisely 2 out of the 4 bits necessary) for 4 horizontally adjacent dots allocating 2 successive bits per dot. Bits 7 and 6 correspond to the leftmost of the 4 dots; then bits 5,4; then bits 3,2; and finally bits 1,0. Then, bits 7,6 of the next higher address byte, continuing to the right.
+
+Hence all even scanlines are buffered in the lower 8000 bytes (8000=100*320/4). For convenience, all the odd scanlines are buffered in the upper 8K bytes starting with offset 8096 decimal from the beginning of the buffer. The scanlines are ordered even first, then odd, going down toward the bottom of the screen.
+
+E. How the Dots are Generated: 640 by 200 B&W Graphics
+Each byte in the display buffer stores on/off code for 8 horizontally adjacent dots. Bit 7 is leftmost, then 6, 5, 4, 3, 2, 1, and 0. Then, bit 7 of the next higher address byte continues to the right until the end of the scanline (640 dots worth). Then one scanline will be skipped, and bit 7 of the next higher address byte continues as the leftmost dot in the next scanline.
+
+3.3 Register Descriptions
+     ___________________________________________________________________________________
+           CRT Control   CRT Status  | Printer Data | Printer Status | Printer Control |
+              (3D8)         (3DA)    |    (03BC)    |    (03BD)      |    (03BE)       |
+     Bit   (Write Only)  (Read Only) | (Read/Write) | (Read Only)    | (Read Write)    |
+     --------------------------------+--------------+----------------+-----------------+
+     0     +Select       -Busy       |     D0       | Not used       | + Strobe        |
+           80 Column Text            |              |                |                 |
+     --------------------------------+--------------+----------------+-----------------+
+     1     +Select       +Light Pen  |     D1       | Not used       | + Auto Feed     |
+           Graphic Mode   Transition |              |                |                 |
+                          Detected   |              |                |                 |
+     --------------------------------+--------------+----------------+-----------------+
+     2     +Select       +Light Pen  |     D2       | Not used       | - Initialize    |
+           Gray Scale                |              |                |   Printer       |
+     --------------------------------+--------------+----------------+-----------------+
+     3     +Enable Video +Vertical   |     D3       | - Error        | + Select In     |
+           Output         Retrace    |              |                |                 |
+     --------------------------------+--------------+----------------+-----------------+
+     4     +Hi Res       Not used    |     D4       | + Select       | + Enable IRQ7   |
+          (-Med Res)                 |              |   Status       |   On Ack        |
+     --------------------------------+--------------+----------------+-----------------+
+     5     +Enable       Not used    |     D5       | + Paper Out    | Not used        |
+           Char Blink                |              |                |                 |
+     --------------------------------+--------------+----------------+-----------------+
+     6     Not used      Not used    |     D6       | - Ack          | Not used        |
+     --------------------------------+--------------+----------------+-----------------+
+     7     Not used      Not used    |     D7       | - Busy         | Not used        |
+     --------------------------------+--------------+----------------+-----------------+
+Color Select (3D9)
+0
+BLUE
+Graphic Background/Text Border
+1
+GREEN
+Graphic Background/Text Border
+2
+RED
+Graphic Background/Text Border
+3
+BRIGHTNESS
+Graphic Background/Text Border
+4
+BRIGHTNESS
+Text Background
+5
+BLUE
+Graphic Bias
+6
+Not used
+3.4 6845 Recommended Parameters
+     _______________________________________
+            40x25 Text   80x25 Text  Graphic
+     _______________________________________
+
+     R10          6           6         6
+     R11          7           7         7
+     R12          0           0         0
+     R13          0           0         0
+     R14          X           X         X
+     R15          X           X         X
+     R16          X           X         X
+     R17          X           X         X
+     _______________________________________
+Appendix A. Connector Specification
+
+================+                         +======================
+                |1  Ground                |
+ Color/Graphics |2  Ground                |
+  Direct Drive  |3  Red                   |   IBM Color Display
+    Adaptor     |4  Green                 | or other Direct Drive 
+                |5  Blue                  |       Monitor
+                |6  Intensity             |
+                |7  Reserved              |
+      J1        |8  Horizontal Drive      |
+                |9  Ground                |
+================+                         +======================
+
+
+
+================+                         +======================
+                |1  +12 Volts             |
+ Color/Graphics |2  Not Used              |      RF
+    Adaptor     |3  Composite Video Output|  Modulator
+      JP2       |4  Logic Ground          |
+================+                         +======================
+
+
+
+================+                         +======================
+                |1  Light Pen Input       |
+ Color/Graphics |2  Not Used              |
+    Adaptor     |3  Light Pen Switch      |   Light Pen
+                |4  Chassis Ground        |     
+      JP1       |5  +5 Volts              |
+                |6  +12 Volts             |
+================+                         +======================
+
+
+  RCA JACK
+      ___                                 +======================
+     /   \                                | 
+    |  ① |             Video             |     Composite Video Input 
+    |    |                                |            Monitor
+     \ 2 /             Ground             |
+                                          +======================
+
+
+                  At Standard TTL Levels
+
+================+                         +======================
+                |   Ground              1 |
+                |   Ground              2 |
+                |   Not Used            3 |
+                |   Not Used            4 | 
+ Monochrome     |   Not Used            5 | 
+ Display        |   + Intensity         6 | Monochrome 
+                |   + Video             7 | Display Adapter
+                |   + Horizontal        8 |
+                |   - Vertical          9 |    J1
+================+                         +======================
+
+Appendix B. Optional Monochrome Mode
+Use the program listed in Appendix C, you can switch from color graphics to monochrome mode. The characteristics of the monochrome mode are:
+
+Text only
+8 by 8 character box
+Horizontal Sync, Vertical Sync and connector pin assignments are PC monochrome monitor compatible.
+To operate the board at mono mode, follow the steps listed below:
+
+SET Main BOARD monitor type as mono.
+Turn the CGA D-SW-4 off
+Turn on the power.
+The monitor will show unstable picture.
+Run mode switch program generated by following the steps in Appendix C.
+Appendix C. Program to Switch Color To Monochrome Mode.
+The LSI chip's default display mode after power on is always in color mode even if step 1 and 2 in Appendix B are done. Therefore a program is required to set the LSI chips parameters for mono mode.
+
+Please follow the procedure listed below to generate a COM file for mode switching from color graphics to monochrome.
+
+Procedure:
+
+Insert you DOS diskette in drive A: and boot system.
+After you have type in the date and time system A> appears, type:
+     debug [enter]
+When debug prompt - appears, type:
+     N MONO.COM     [Enter]
+     A              [Enter]
+     MOV DX,03B4    [Enter]
+     MOV AL,0A      [Enter]
+     OUT DX,AL      [Enter]
+     INC DX         [Enter]
+     MOV AL,06      [Enter]
+     OUT DX,AL      [Enter]
+     DEC DX         [Enter]
+     MOV AL,0B      [Enter]
+     OUT DX,AL      [Enter]
+     INC DX         [Enter]
+     MOV AL,07      [Enter]
+     OUT DX,AL      [Enter]
+     MOV DX,03BD    [Enter]
+     MOV AL,65      [Enter]
+     OUT DX,AL      [Enter]
+     INC DX         [Enter]
+     MOV AL,11      [Enter]
+     OUT DX,AL      [Enter]
+     INT 27         [Enter]
+                    [Enter]
+     RCX            [Enter]
+     1E             [Enter]
+     W              [Enter] 
+Note:
+
+Now above typed-in program is saved on your system diskette with the name MONO.COM
+Whenever you want to switch from color graphics to monochrome mode, just type:
+     MONO    [Enter]
+You have to use an PC compatible monochrome monitor in this mode.
+[JCE: I don't see the necessity of the INT 27 (terminate and stay resident) in the program above, since it does not alter any interrupt vectors or other BIOS data. INT 20 (terminate) should suffice.]
+Appendix D. D-SW Setting
+      +----------------------+
+      |   +-+  +-+  +-+  +-+ |  D-SW
+      | | | |  | |  | |  | | |
+      | v +-+  +-+  +-+  +-+ |
+      |ON  1    2    3    4  |
+      +----------------------+
+Color Mode (For CGA, EGA, Dual-frequency Monochrome Monitor): 1, 2, 4, ON
+Monochrome Mode (For Dual-Frequency Monochrome Monitor): 1. ON, 2, 4 OFF or 2. ON, 1,4 OFF
+
+
+Transcribed by John Elliott 2025-05-06
