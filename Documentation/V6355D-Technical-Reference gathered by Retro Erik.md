@@ -775,7 +775,7 @@ There is a **discrepancy** between sources:
 
 ---
 
-### 17c. Register 0x64 Vertical Adjustment *(Confirmed by Z-180)*
+### 17c. Register 0x64 Vertical Adjustment *(TESTED - WORKING)*
 
 Both John Elliott and Z-180 manual agree on this:
 
@@ -791,7 +791,270 @@ Register 0x64:
     Bits 6-7: Reserved (leave as 0)
 ```
 
-⚠️ **Status:** Confirmed by Z-180 manual, not verified on PC1.
+✅ **Status:** Confirmed by Z-180 manual and **VERIFIED on real PC1 hardware** — Register 0x64 works with ±8 line range (3-bit adjustment).
+
+#### PC1 Hardware Test Results (February 2, 2026)
+
+A comprehensive hardware test (scroll_test.asm) was performed on actual PC1 hardware to verify Register 0x64 functionality:
+
+**Test Setup:**
+- Graphics mode enabled (0x4A to port 0x3D8)
+- Color bands displayed on screen (easy to detect vertical movement)
+- Register 0x64 bits 3-5 written with values 0-7 (all possible 3-bit values)
+- Tested in **160×200×16 graphics mode only**
+
+**Test Results:**
+| Observation | Result |
+|-------------|--------|
+| Write operations crash? | ❌ NO - Register 0x64 accepts writes without fault |
+| Screen shifts vertically? | ✅ **YES!** - Screen shifts by 0-7 rows |
+| Max scroll range? | ✅ **8 rows** (exactly 3 bits worth: 2³ = 8 values) |
+| Matches Z-180 documentation? | ✅ **YES** - "Bits 3-5: Vertical adjustment (rows to shift)" confirmed |
+| Colors affected during scroll? | ⚠️ YES - Color shifts observed during register write (side effect) |
+
+**Conclusion:**
+- Register 0x64 **DOES work** for vertical scrolling on Olivetti Prodest PC1
+- Limited to ±8 line adjustments (intended for monitor calibration)
+- For hardware scrolling within VRAM bounds, use CGA CRTC R12/R13 (see section 17f below)
+- Register 0x64 useful for fine-tuning display position or micro-scrolling effects
+
+**Recommendation:**
+For smooth scrolling **within VRAM** (16KB = 200 rows), use **CGA CRTC R12/R13** via ports 0x3D4/0x3D5. For scrolling images **taller than VRAM**, software viewport copying is required. For small adjustments (±4 rows each direction), Register 0x64 is simpler and more direct.
+
+**Note:** Test was performed in **graphics mode only** (0x4A). Register 0x64 behavior in text mode remains unknown.
+
+---
+
+### 17f. CGA CRTC R12/R13 Hardware Scrolling ✅ VERIFIED
+
+*Verified on real PC1 hardware (February 2, 2026)*
+
+The V6355D supports standard MC6845-compatible CRTC registers for hardware scrolling via the **Start Address** registers (R12 and R13).
+
+#### Ports and Registers
+
+| Port | Function |
+|------|----------|
+| 0x3D4 | CRTC Address Register (select register 0-17) |
+| 0x3D5 | CRTC Data Register (read/write selected register) |
+
+| Register | Name | Description |
+|----------|------|-------------|
+| R12 (0x0C) | Start Address High | High 6 bits of VRAM start address (word offset) |
+| R13 (0x0D) | Start Address Low | Low 8 bits of VRAM start address (word offset) |
+
+#### How It Works
+
+The Start Address registers tell the CRTC where to begin reading VRAM for display. Changing this value makes the display "pan" through video memory instantly, with no CPU overhead during display.
+
+```asm
+; Set CRTC start address to word offset in AX
+set_crtc_start:
+    push ax
+    push bx
+    push dx
+    
+    mov bx, ax              ; Save word offset
+    
+    ; Write R12 (high byte)
+    mov dx, 0x3D4
+    mov al, 0x0C            ; Register 12
+    out dx, al
+    mov dx, 0x3D5
+    mov al, bh              ; High byte of offset
+    out dx, al
+    
+    ; Write R13 (low byte)
+    mov dx, 0x3D4
+    mov al, 0x0D            ; Register 13
+    out dx, al
+    mov dx, 0x3D5
+    mov al, bl              ; Low byte of offset
+    out dx, al
+    
+    pop dx
+    pop bx
+    pop ax
+    ret
+```
+
+#### ⚠️ CRITICAL LIMITATION: VRAM-Only Addressing
+
+**R12/R13 can ONLY address video memory (16KB at segment B000h).**
+
+The CRTC reads from VRAM, not system RAM. This means:
+
+| Image Size | VRAM Fit? | Scrolling Method |
+|------------|-----------|------------------|
+| 160×200 (16KB) | ✅ Yes | R12/R13 works but image already fills screen |
+| 160×400 (32KB) | ❌ No | Software viewport copying required |
+| 160×800 (64KB) | ❌ No | Software viewport copying required |
+
+**Important clarification:** R12/R13 hardware scrolling works correctly on the V6355D. The limitation is that it can only pan through what's already in the 16KB VRAM. For images taller than 200 rows, the extra data must be stored in system RAM and copied to VRAM—R12/R13 cannot help with this.
+
+For images **larger than VRAM**, you must:
+1. Keep the full image in system RAM
+2. Copy a 200-row viewport to VRAM each frame
+3. R12/R13 cannot reduce this copying—use software blitting (demo7 approach)
+
+We attempted to combine R12/R13 with a circular buffer technique (copy only 2 new rows per scroll, use R12/R13 to shift display) but this **failed due to the 384-byte gap problem** described below.
+
+#### Scrolling Techniques Comparison
+
+| Technique | Speed | Image Size Limit | Flicker | Notes |
+|-----------|-------|------------------|---------|-------|
+| **R12/R13 Hardware Scroll** | Instant | 200 rows (VRAM size) | None | Works, but limited to VRAM content |
+| **Register 0x64 Fine Scroll** | Instant | ±8 rows adjustment | None | Monitor calibration only |
+| **Software Viewport Copy** | Slow (~16KB/frame) | Unlimited | Yes (without vsync) | demo7.asm - only working method for tall images |
+| **Circular Buffer + R12/R13** | ⚠️ FAILED | N/A | N/A | **384-byte gap bug** - see below |
+
+#### Circular Buffer Technique (Advanced)
+
+For scrolling images taller than VRAM with minimal flicker:
+
+1. Fill VRAM with 200 rows initially
+2. Use R12/R13 to scroll smoothly within VRAM
+3. When approaching VRAM edge, copy 2 new rows into the "old" area
+4. Wrap R12/R13 address back to beginning
+5. Result: Only 160 bytes copied per 2-row scroll step, not 16KB
+
+This combines fast hardware scrolling with minimal software updates.
+
+#### ⚠️ THE 384-BYTE GAP PROBLEM (Circular Buffer Limitation) ✅ VERIFIED
+
+*Verified on real PC1 hardware (February 2, 2026) - demo8a.asm*
+
+**The circular buffer technique described above has a critical flaw that prevents it from working with 200-row displays.**
+
+##### The Problem
+
+CGA interlaced memory uses two 8KB banks, but each bank only needs 8000 bytes for 100 rows:
+
+```
+Even bank (0x0000-0x1FFF):
+  - Used:   0x0000-0x1F3F = 8000 bytes (100 rows × 80 bytes)
+  - Gap:    0x1F40-0x1FFF = 192 bytes (unused)
+  
+Odd bank (0x2000-0x3FFF):
+  - Used:   0x2000-0x3F3F = 8000 bytes (100 rows × 80 bytes)
+  - Gap:    0x3F40-0x3FFF = 192 bytes (unused)
+
+Total gap: 192 × 2 = 384 bytes
+```
+
+##### Why Circular Buffer Fails
+
+The V6355D/MC6845 CRTC wraps at **8192 bytes** (physical bank size), not 8000 bytes (logical display area):
+
+| crtc_start_addr | What Gets Displayed |
+|-----------------|---------------------|
+| 0 | Rows 0-199 → ✅ Correct |
+| 80 | Rows 2-199, then **GAP DATA** at bottom → ❌ Garbage! |
+| 160 | Rows 4-199, then **MORE GAP DATA** → ❌ Garbage! |
+
+**Example:** With `crtc_start_addr = 80` (scrolled down 2 rows):
+- Display reads even bank offsets: 80, 160, 240, ... 7920, **8000**, 8080...
+- Offset 8000-8079 is in the **gap area** (0x1F40-0x1F8F)
+- Gap contains uninitialized/garbage data
+- Result: Bottom row(s) of screen show random pixels
+
+##### Visual Representation
+
+```
+Before scroll (crtc_start = 0):
+┌──────────────────────────┐
+│ Row 0   ← display start  │
+│ Row 2                    │
+│ Row 4                    │
+│ ...                      │
+│ Row 196                  │
+│ Row 198 ← last visible   │
+└──────────────────────────┘
+Gap (hidden): bytes 8000-8191
+
+After scroll (crtc_start = 80):
+┌──────────────────────────┐
+│ Row 2   ← display start  │
+│ Row 4                    │
+│ ...                      │
+│ Row 198                  │
+│ ████ GAP GARBAGE ████    │ ← reads from offset 8000+
+└──────────────────────────┘
+```
+
+##### Demo Code Reference
+
+- **demo8a.asm** — Demonstrates the circular buffer concept with the gap bug visible
+- **demo8.asm** — Comprehensive documentation of all failed workaround attempts
+- **demo7.asm** — Uses full viewport copy (16KB/frame) to avoid the gap problem
+
+##### Workarounds Tested ✅ ALL FAILED
+
+*All workarounds tested on real PC1 hardware (February 2, 2026)*
+
+**Solution A: Gap Patching** ❌ FAILED
+- **Idea:** Copy wraparound data into gap regions (offsets 8000-8191) so CRTC reads valid pixels when it reads from the gap.
+- **Result:** When `crtc_start_addr` exceeds ~192 bytes, the display shows images offset 64-80 pixels to the right, then jumps to correct position partway down the screen.
+- **Conclusion:** The V6355D does not handle CRTC address wrapping the same way as standard MC6845 CGA. Gap patching is fundamentally broken on this chip.
+
+**Solution B: Reduced Viewport (196, 192, 180 rows)** ❌ NOT VIABLE
+- **Idea:** Reduce visible rows via CRTC R6 so CRTC never reads into gap region.
+- **Math:** 196 rows = 98 rows/bank = 352 byte headroom = only 4 fast scroll steps before refresh needed. 180 rows = 12 steps. 160 rows = 22 steps.
+- **Result:** Would still require periodic refresh after headroom exhausted. Loses screen real estate for minimal gain.
+- **Conclusion:** Not worth the tradeoff—loses visible area without solving the fundamental problem.
+
+**Solution C: Hybrid Periodic Refresh** ❌ STUTTERS BADLY
+- **Idea:** Fast circular updates for N frames, then full 16KB refresh when approaching gap.
+- **Result:** With 192-byte gap limit, can only do 2 fast frames (160 bytes each) before mandatory 16KB refresh. Pattern of "fast-fast-slow" is visibly stuttery and worse than demo7's consistent slow speed.
+- **Conclusion:** 2:1 ratio of fast:slow frames is not smooth enough for usable scrolling.
+
+##### Why All Solutions Fail
+
+The fundamental constraint is:
+- **Gap size:** 192 bytes per bank (fixed by CGA interlaced memory layout)
+- **Bytes per scroll step:** 80 bytes (1 row per bank = 2 visual rows)
+- **Maximum fast scroll steps:** 192 ÷ 80 = **2.4 steps**
+
+This means **any** approach using R12/R13 with 200 visible rows will require a full VRAM refresh every 2-3 scroll steps. There is no configuration of gap patching, viewport reduction, or hybrid refresh that avoids this limit while maintaining smooth scrolling.
+
+##### Conclusion
+
+**The circular buffer technique is fundamentally incompatible with 200-row CGA interlaced mode** due to the 384-byte gap and V6355D's non-standard CRTC address handling. For smooth scrolling of tall images, use software viewport copying (demo7 approach).
+
+##### Future Investigation
+
+The V6355D may have undocumented registers or modes that could enable:
+- Different memory layouts without the gap
+- Linear (non-interlaced) addressing
+- Different CRTC address generation schemes
+
+Until discovered, software viewport copying remains the only reliable method for scrolling tall images.
+
+#### PC1 Hardware Test Results
+
+**What works:**
+- ✅ R12/R13 successfully pans display through VRAM
+- ✅ Scrolling by 80 bytes = 1 line (for each bank)
+- ✅ Works in 160×200×16 hidden graphics mode
+- ✅ No visible tearing when updated during VBlank
+
+**What doesn't work:**
+- ❌ Cannot address system RAM (only 16KB VRAM visible)
+- ❌ Images taller than 200 rows require software assistance
+- ❌ Gap patching for circular buffer (V6355D has non-standard address wrapping)
+- ❌ Reduced viewport doesn't provide enough headroom for smooth scrolling
+
+#### Reference: 8088 MPH Credits Scroller
+
+The famous 8088 MPH demo's credits scroller uses R12/R13 in **text mode** to scroll pre-loaded text through 16KB of text VRAM. They do NOT scroll images larger than VRAM—the entire scroll buffer fits in video memory.
+
+```asm
+; From 8088 MPH credits (text mode)
+mov di,initialScrollPosition    ; Start at position 2064 in VRAM
+mov cx,0x2000                   ; Fill 8KB words (16KB) of text VRAM
+rep movsw                       ; Pre-load all text
+; ...later use hCrtcUpdate to change Start Address for scrolling
+```
 
 ---
 
