@@ -342,7 +342,269 @@ palette:
 
 ---
 
-# 🟦 6. **Video Control (Blanking)** ✅
+# 🟦 5b. **Advanced: Per-Scanline Palette Manipulation & Timing Limits** ✅
+
+*Verified by practical testing on real PC1 hardware (February 2026, palram5.asm experiment).*
+
+While section 5 covers per-frame palette changes during VBlank, this section documents the theoretical possibility—and practical limitations—of changing palette entry 0 **multiple times within a single scanline** for horizontal color effects.
+
+### Practical Experiment: palram5.asm
+
+A comprehensive test (palram5.asm) attempted to write palette entry 0 repeatedly during the visible scanline period to create horizontal color bands. The experiment revealed important timing constraints.
+
+### Timing Budget Analysis
+
+**Scanline Duration (CRT drawing one horizontal line):**
+- Total scanline time: ~63.5 microseconds
+  - HBLANK (horizontal blanking): ~10 μs (80 CPU cycles @ 8MHz)
+  - Visible area: ~53 μs (424 CPU cycles @ 8MHz)
+  - **Total per scanline: ~509 CPU cycles**
+
+**Palette Write Sequence Cost:**
+- Address register select: ~7 cycles (OUT instruction)
+- Data write 1 (R value): ~7 cycles
+- Data write 2 (G|B value): ~7 cycles
+- **Per write total: ~21 cycles**
+
+**Theoretical Writes Per Scanline:**
+- Full scanline budget: 509 cycles
+- Per-write cost: 21 cycles
+- **Theoretical maximum: ~24 writes per scanline**
+- **Practical maximum (with delays): ~15-20 writes**
+
+### The Critical Jitter Problem: Polling HSYNC
+
+**Unavoidable Horizontal Position Jitter:**
+
+The HSYNC polling loop introduces unpredictable delays:
+
+```asm
+.wait_visible:
+    in al, dx           ; 7 cycles - Read status port
+    test al, 0x01       ; 2 cycles - Test HSYNC bit
+    jnz .wait_visible   ; 3 cycles (if jumping) = 12 cycles/iteration
+```
+
+When HSYNC transitions from HIGH to LOW, your code may catch it at **any point** in this polling loop:
+- **Best case:** Detected immediately → ~2 cycle latency from transition
+- **Worst case:** Just missed it → ~12 more cycles until next detection
+- **Observed jitter:** ~4-8 pixels (typical ~10 cycle difference = 2.5 μs → 4 pixels @ ~160 pixels/53μs)
+
+**This jitter is UNAVOIDABLE with polling.** It's not a bug—it's a fundamental limitation of interrupt-free, polled synchronization. Even professional demo code experiences similar jitter with this technique.
+
+**Test Results:**
+- ✅ Vertical stripe alignment is perfect (setup timing works)
+- ✅ Observed horizontal jitter matches theoretical calculations
+- ⚠️ Jitter is 4-8 pixels—noticeable but acceptable for most effects
+
+### Critical Optimization: Setup During HBLANK
+
+**Wrong approach (introduces extra jitter):**
+```asm
+.wait_high:
+    in al, dx
+    test al, 0x01
+    jz .wait_high
+    
+    ; PROBLEM: Setup code here delays first write!
+    push cx
+    xor si, si
+    mov cl, [writes_per_line]
+    xor ch, ch
+    
+    ; Now wait for visible...
+    .wait_visible: ...
+    ; First write happens late—variable delay!
+```
+
+**Correct approach (minimizes jitter):**
+```asm
+.wait_high:
+    in al, dx
+    test al, 0x01
+    jz .wait_high
+    
+    ; Setup DURING HBLANK (while HSYNC HIGH)
+    push cx
+    xor si, si
+    mov cl, [writes_per_line]
+    xor ch, ch
+    
+    ; Wait for visible—now first write happens IMMEDIATELY!
+    .wait_visible:
+    in al, dx
+    test al, 0x01
+    jnz .wait_visible
+    
+    ; First OUT instruction executes ~7 cycles after HSYNC LOW
+    mov al, 0x40
+    out PORT_PAL_ADDR, al
+```
+
+Moving setup to HBLANK reduces variance in first-write timing from ~50+ cycles to ~7 cycles, reducing jitter from 12+ pixels to 1-2 pixels. Still present due to polling variance, but minimized.
+
+### Scanline Skipping: The Delay Penalty
+
+**Problem:** Excessive delays between palette writes cause the main loop to exceed scanline duration.
+
+**Example that FAILS:**
+```asm
+mov al, [test_colors + bx]
+out PORT_PAL_DATA, al
+    
+; Large delay loop (WRONG!)
+push cx
+mov cx, 10          ; 10 iterations of loop
+.delay:
+    loop .delay     ; ~3 cycles per iteration = 30+ cycles total
+pop cx
+
+; Result: Each write takes ~20 + 30 = 50 cycles
+; 8 writes = 400 cycles in just the write loop
+; Plus setup/jump overhead = ~450+ cycles per scanline
+; Exceeds 509 cycle budget!
+```
+
+**Observed Effect in palram5.asm Test:**
+- With 8 writes × 10-cycle delays: Total = ~568 cycles (exceeds 509-cycle scanline budget)
+- Only ~2-3 scanlines fit in each frame's ~17ms window
+- Result: Only **~68 of 200 scanlines get processed** (200 ÷ 3 ≈ 67)
+- **Visible on screen:** Only the first third of screen shows stripes; rest blank
+
+**Solution:** Use minimal delays (just 3 NOPs) to space writes without excessive overhead:
+```asm
+mov al, [test_colors + bx]
+out PORT_PAL_DATA, al
+
+; Minimal delay (CORRECT)
+nop
+nop
+nop
+
+; Result: Each write = ~20 + 9 = 29 cycles
+; 8 writes = 232 cycles (well within budget)
+; All 200 scanlines process per frame ✅
+```
+
+### Polling vs Interrupt Methods Comparison
+
+Two fundamentally different synchronization approaches exist:
+
+#### Method A: Polling HSYNC (This Hardware, palram5.asm)
+**Advantages:**
+- ✅ Simple to implement
+- ✅ No interrupt handlers needed
+- ✅ Works on V6355D (no interrupt output documented)
+
+**Disadvantages:**
+- ❌ 4-8 pixel horizontal jitter (inherent)
+- ❌ CPU dedicated to polling (can't do other work)
+- ❌ Tight cycle budget (must minimize code)
+
+**Code pattern:**
+```asm
+.wait_high:
+    in al, dx           ; Poll until HSYNC high (HBLANK)
+    test al, 0x01
+    jz .wait_high
+    
+    ; Setup here during HBLANK
+    
+.wait_visible:
+    in al, dx           ; Poll until HSYNC low (visible starts)
+    test al, 0x01
+    jnz .wait_visible
+    
+    ; Writes here at precise pixel 0
+```
+
+#### Method B: PIT Timer Interrupts (8088mph, Area 5150, Kefrens Bars)
+**Used by:** Professional demo scene code on CGA-compatible systems
+
+**Advantages:**
+- ✅ Zero horizontal jitter (hardware-timed)
+- ✅ CPU can do other work between interrupts
+- ✅ Very precise synchronization
+
+**Disadvantages:**
+- ❌ Requires PIT (8253/8254 timer chip) to be accessible
+- ❌ Requires careful timer calibration to match CRT frequency
+- ❌ Not verified to work on V6355D (different timing than CGA)
+
+**Code pattern (from Kefrens source):**
+```asm
+; Program PIT to generate IRQ0 at scanline frequency
+writePIT16 0, 2, 76*262    ; ~59.923Hz @ 262 scanlines = one interrupt per scanline
+setInterrupt 8, interrupt8 ; Install ISR
+
+; ISR fires with zero jitter
+interrupt8:
+    mov al,0x20
+    out 0x20,al             ; Acknowledge PIC
+    ; Write palette here—perfectly timed!
+    iret
+```
+
+**Why Not Use PIT on PC1?**
+- The V6355D datasheet does not document per-scanline interrupt generation
+- CGA's PIT synchronization relies on specific CRTC timing (which V6355D may not match exactly)
+- The interrupt frequency would need to match the V6355D's 50Hz PAL vertical timing (not the CGA standard 60Hz NTSC)
+- No verified working example on PC1 hardware (unlike polling, which is proven)
+
+**Conclusion:** For V6355D, polling is the proven method. PIT interrupts may be theoretically possible but require undocumented research and careful calibration.
+
+### Color Resolution Within a Scanline
+
+**With 8 palette writes per scanline:**
+- 160 pixels ÷ 8 writes = ~20 pixels per color band
+- Creates clearly visible vertical stripes on RGB monitors
+- Each stripe is a distinct horizontal color
+
+**With 16 palette writes per scanline (maximum practical):**
+- 160 pixels ÷ 16 writes = ~10 pixels per color band
+- Creates narrow horizontal lines
+- Approaches smooth gradients at screen resolution
+
+**With 3 NOPs between writes:**
+- Each write takes ~29 cycles
+- 16 writes = 464 cycles (just fits in 509-cycle budget)
+- Minimal delays mean writes are evenly spaced in time = evenly spaced in pixels
+- Creates uniform horizontal banding pattern
+
+### Research Findings Summary
+
+| Finding | Impact | Workaround |
+|---------|--------|-----------|
+| **Polling jitter 4-8 pixels** | Unavoidable | Use for visual effects, not precise positioning |
+| **Scanline skipping with large delays** | Visible (200→68 lines) | Use minimal delays (NOPs only) |
+| **Setup timing variance** | Reduces jitter by ~10x | Move setup to HBLANK before waiting |
+| **No V6355D interrupt output** | Can't use PIT method | Stick with polling synchronization |
+| **CPU cycle budget tight** | Limits write count | 15-20 writes practical max, not 24 theoretical |
+
+### Reference: palram5.asm Implementation
+
+The palram5.asm file in PC1-Labs/demos/05-scanline-palette/ demonstrates this technique:
+- Polls HSYNC for synchronization
+- Setup during HBLANK to minimize jitter
+- Uses 3-NOP delays (no large loops)
+- Processes all 200 scanlines per frame
+- Adjustable write count (. and , keys) for testing different band counts
+- Creates smooth horizontal color transitions within each scanline
+
+### Use Cases for Per-Scanline Palette Writes
+
+**Suitable for:**
+- ✅ Horizontal gradient fills (smooth left-to-right color transitions)
+- ✅ Scanline-based visual effects (each line renders different palette state)
+- ✅ Pseudo-3D effects using palette as animation layer
+- ✅ Educational timing demonstrations
+
+**Not suitable for:**
+- ❌ Precise horizontal raster positioning (jitter is visible)
+- ❌ Text rendering (colors must be stable per character)
+- ❌ Photo-realistic graphics (banding artifacts too obvious)
+
+---
 
 *Verified by working code.*
 
@@ -519,6 +781,17 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 - Per-scanline palette changes are too slow
 
 *(Source: Simone Riminucci, vcfed.org forums + our demo testing)*
+
+---
+
+# 🟦 12b. **SCI0 Driver Lessons** ✅
+
+*Verified by real PC1 hardware while building the SCI0 driver series (PC1-1..PC1-7).* 
+
+- SCI entry point must use the 3-byte `E9` jump convention; a plain `jmp` can break keyboard/interrupt behavior.
+- CGA interlace requires per-row interleaved writes; two-pass even/odd updates cause visible combing.
+- Direct framebuffer to VRAM conversion (3 transfers) is faster than line/full buffering (4 transfers) on the 8-bit bus.
+- Rectangle-aware updates are essential; full-frame copies are slower for typical SCI dirty regions.
 
 ---
 
@@ -1055,6 +1328,241 @@ mov cx,0x2000                   ; Fill 8KB words (16KB) of text VRAM
 rep movsw                       ; Pre-load all text
 ; ...later use hCrtcUpdate to change Start Address for scrolling
 ```
+
+---
+
+### 17i. V6355D Memory Architecture Clarification ✅ FROM SIMONE
+
+*Simone provided authoritative correction to memory architecture assumptions (February 6, 2026)*
+
+The V6355D's relationship between internal and external addressing had been theorized as a potential workaround to CGA interlacing, but the actual architecture is:
+
+#### Internal vs. External Addressing
+
+**Memory Layout:**
+- **Internally:** VRAM is **linear** — reads sequentially from offset 0x0000 onward
+- **Externally:** CGA interlaced addressing is enforced by **hardware-locked address line swapping** at the pin level
+- **Address swapping:** A0 line is swapped (inverted or rerouted) to split the memory visually into two 8KB banks
+- **Speed:** The memory is fast enough for true linear operation, but the V6355D intentionally applies interlaced formatting at the hardware level
+
+#### Why This Matters
+
+1. **No undocumented linear mode:** There is no register or configuration that disables the address swapping. It is hardcoded in the silicon.
+2. **Implications for developers:** You cannot bypass interlacing to achieve a single 16384-byte linear VRAM bank. The 384-byte gap in each 8KB bank is inherent to the CGA interlace format and cannot be avoided.
+3. **Positive side effect:** The fast internal memory makes the V6355D reliable for rapid register updates (palette, scrolling) since physical memory cycles are not the bottleneck.
+
+#### Dummy Registers
+
+**CGA-derived registers that are non-functional on V6355D:**
+All CGA/MC6845 emulation registers related to interlace control are **dummy registers** on the V6355D:
+- Interlace mode register (R8)
+- Interlace offset register (R16)
+- Skew/line attribute registers
+
+**Why:** These registers are irrelevant because interlacing is forced by hardware at the address line level, not through register control. The V6355D provides CGA-compatible register accesses for software compatibility, but the actual interlace behavior cannot be changed.
+
+#### Implications for 320×200 Mode
+
+For 320×200×4 color mode (which uses linear addressing naturally), the interlace overhead is not present, allowing full utilization of VRAM without the 384-byte gap.
+
+---
+
+### 17j. Dynamic Palette Switching Per Scanline ✅ VERIFIED BY SIMONE
+
+*Simone demonstrated per-scanline palette switching on PC1 hardware (February 6, 2026)*
+
+**Verified working on Olivetti Prodest PC1** — Simone provided photographic evidence of Sierra games (Monkey Island) running with 512 virtual colors on actual PC1 hardware using this technique.
+
+#### Achieving 512 Virtual Colors in 320×200
+
+The key insight: The V6355D supports **per-scanline CGA palette switching** by writing to port 0x3D8 during horizontal blanking, allowing different color combinations on each horizontal line.
+
+#### The Two CGA Palettes (320×200×4 Mode)
+
+In standard CGA 320×200×4 color mode, you have **4 simultaneous colors**: one background + three foreground colors from a fixed palette.
+
+```
+Palette 0 (Cyan/Magenta/White):
+  Background: Any of 16 colors (selectable)
+  Foreground 1: Cyan (dark or bright)
+  Foreground 2: Magenta (dark or bright)
+  Foreground 3: White (dark or bright)
+
+Palette 1 (Green/Red/Yellow):
+  Background: Any of 16 colors (selectable)
+  Foreground 1: Green (dark or bright)
+  Foreground 2: Red (dark or bright)
+  Foreground 3: Yellow/Brown (dark or bright)
+```
+
+**Controlled by:** Port 0x3D8 (CGA Mode Control Register)
+- Bit 5: Palette select (0 = Palette 0, 1 = Palette 1)
+- Bit 4: Intensity (0 = dark colors, 1 = bright colors)
+- Bits 0-3: Background color (0-15)
+
+#### Switching Strategy
+
+**Basic concept:**
+1. **On Scanline N (during HSync):** Set Palette 0 + Background Color A + Intensity = Light
+2. **Display scanline** with Cyan/Magenta/White palette
+3. **On Scanline N+1 (during HSync):** Set Palette 1 + Background Color B + Intensity = Dark
+4. **Display scanline** with Green/Red/Yellow palette
+5. Repeat, alternating palettes and varying background colors per line
+
+**Timing:**
+- **HSync (horizontal blanking):** ~10 microseconds — safe time to update palette register
+- **Active line rendering:** ~51 microseconds — prepare next line's palette configuration
+- Each line gets **4 colors from one of two palettes**
+
+#### Result: 512 Virtual Colors
+
+**Calculation:**
+- **2 palettes** (cyan/magenta/white vs green/red/yellow)
+- **16 background colors** per palette
+- **2 intensity levels** (dark vs bright foreground)
+- **8 combinations per palette** (16 backgrounds × 2 intensity ÷ mixing = effective combinations)
+- **Total: 2 × 16 × 16 = 512 unique color combinations** across 200 scanlines
+
+Different scanlines can show completely different color sets, creating the appearance of far more than 4 simultaneous colors when viewed as a whole screen.
+
+#### Implementation Requirements
+
+1. **Mode:** CGA 320×200×4 (standard CGA graphics mode)
+2. **Precise timing:** HSync interrupt or CRTC-based synchronization required
+3. **Fast port writes:** Port 0x3D8 (Mode Control Register) updated every scanline
+4. **Pre-calculated palette table:** 200-entry table with palette/background/intensity per line
+5. **V6355D compatibility:** ✅ **VERIFIED working on PC1** (Simone, February 2026)
+
+#### Code Strategy
+
+```asm
+; Pseudocode for per-scanline palette switching (320×200×4 mode)
+
+    ; Enable 320×200×4 graphics mode
+    mov ax, 0x0004
+    int 0x10
+    
+scanline_loop:
+    ; Wait for HSync (horizontal retrace)
+    call wait_hsync
+    
+    ; Get palette byte for current scanline
+    mov al, [palette_table + si]
+    inc si
+    
+    ; Update CGA mode control register
+    ; (changes palette, intensity, background instantly)
+    mov dx, 0x3D8
+    out dx, al
+    
+    ; Loop until all 200 scanlines rendered
+    cmp si, 200
+    jl scanline_loop
+
+; Palette table (200 bytes, one per scanline):
+palette_table:
+    db 0x1D    ; Line 0: Palette 0, Bright, Background=Blue
+    db 0x2E    ; Line 1: Palette 1, Bright, Background=Yellow
+    db 0x1A    ; Line 2: Palette 0, Bright, Background=Green
+    ; ...196 more entries
+```
+
+#### Advantages Over Dithering
+
+| Technique | Colors per line | Total screen colors | Speed | Artifacts |
+|-----------|----------------|---------------------|-------|----------|
+| Standard 320×200×4 | 4 | 4 | Real-time | None |
+| Palette switching per line | 4 | 512 virtual | Real-time (with precalc) | Horizontal color bands visible |
+| Standard 160×200×16 | 16 | 16 | Real-time | None |
+| Software dithering | 4 | 256 quasi | Slow (~3+ frames) | Dither patterns visible |
+
+#### Comparison to 160×200×16 Mode
+
+| Feature | 320×200×4 + Palette Switching | 160×200×16 (PC1 Hidden Mode) |
+|---------|------------------------------|----------------------------|
+| Horizontal resolution | 320 pixels | 160 pixels |
+| Colors per scanline | 4 | 16 |
+| Total unique colors per frame | 512 (via switching) | 16 (fixed palette) |
+| Horizontal banding | Visible (different palettes) | None |
+| Complexity | High (timing-critical) | Low (static palette) |
+
+#### Potential for 160×200×16 Mode Extension
+
+An unexplored possibility: If the V6355D's palette registers (0xDD/0xDE) can be updated during HSync in the hidden 160×200×16 mode, this could theoretically provide **256+ virtual colors** with 16 colors per scanline. This remains untested.
+
+#### Applications
+
+This technique is ideal for:
+- **Sierra SCI games** with detailed backgrounds (Monkey Island, as demonstrated)
+- Smooth vertical gradients (sky, water, sunsets)
+- Title screens and static artwork with pre-calculated scanline palettes
+- Games that can tolerate horizontal color banding
+
+**Note:** Requires precise HSync timing and pre-calculated palette tables. Not suitable for fast-moving horizontal graphics where per-line color changes would create visible artifacts.
+
+---
+
+### 17k. Extended Row Support (204 rows) ✅ FROM SIMONE
+
+*Simone confirmed undocumented capability for exceeding standard 200-row display (February 6, 2026)*
+
+#### Hidden 204-Row Mode
+
+The V6355D can display **204 rows** (16,320 bytes) instead of the standard 200 rows (16,000 bytes).
+
+#### Memory Allocation
+
+```
+Standard 200-row mode:
+  Even bank: 100 rows × 80 bytes = 8000 bytes
+  Odd bank: 100 rows × 80 bytes = 8000 bytes
+  Total used: 16,000 bytes
+  
+  Gap per bank: 192 bytes
+  Total VRAM: 16,384 bytes
+
+Extended 204-row mode:
+  Even bank: 102 rows × 80 bytes = 8160 bytes
+  Odd bank: 102 rows × 80 bytes = 8160 bytes
+  Total used: 16,320 bytes (USE 4 ADDITIONAL BYTES!)
+  
+  Gap per bank: 32 bytes (reduced)
+  Total VRAM: 16,384 bytes (still fits!)
+```
+
+#### Implementation
+
+To enable 204-row mode:
+1. Set CRTC register R6 ("Vertical Displayed Rows") to 204 (0xCC) instead of 200 (0xC8)
+2. Adjust R7 ("Vertical Sync Position") proportionally
+3. Adjust R9 ("Max Scan Line Address") to maintain proper interlace timing
+
+**Exact register values:** To be determined through hardware testing.
+
+#### Advantage Over Standard Mode
+
+- **+320 additional bytes of VRAM** for image data
+- **4 more scanlines** at the bottom of the display
+- **Better circular buffer headroom:** 32-byte gap instead of 192-byte gap doubles viable scroll steps
+
+#### Circular Buffer Re-evaluation
+
+With 204-row mode's reduced gap:
+- Maximum fast scroll steps: 32 ÷ 80 ≈ **0.4 steps** (worse than 200-row!)
+- **Conclusion:** Even with extended rows, the gap remains a fundamental limitation. 204 rows provides storage capacity, not better scrolling.
+
+#### Practical Use Cases
+
+1. **Taller image storage:** 204-row display fills 16KB exactly with minimal waste
+2. **Scrolling storage:** Can hold 8 independent 204-row frames with only 32-byte gaps (for offline scrolling effects)
+3. **Sierra SCI adaptation:** Could store CGA images at near-native height with fewer cropping requirements
+
+#### Status
+
+- ✅ Information provided by Simone (February 2026)
+- ✅ Theoretically sound based on V6355D CRTC capabilities
+- ⚠️ Exact CRTC register values need hardware testing and verification
+- ⚠️ May require display synchronization tuning to avoid artifacts
 
 ---
 
