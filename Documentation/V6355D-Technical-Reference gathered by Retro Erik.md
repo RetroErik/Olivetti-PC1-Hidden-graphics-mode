@@ -70,13 +70,13 @@ This mode provides:
 
 | Port | Alias | Function |
 |------|-------|----------|
-| **0xDD** | 0x3DD | Register Bank Address (select register 0x00–0x7F) |
-| **0xDE** | 0x3DE | Register Bank Data (read/write selected register) |
-| **0xD8** | 0x3D8 | Mode Control Register (CGA compatible + extensions) |
-| **0xD9** | 0x3D9 | Color Select / Border Color (0–15) |
-| **0xDA** | 0x3DA | Status Register (bit 0=HSync, bit 3=VBlank) |
+| **0x3DD** | 0xDD | Register Bank Address (select register 0x00–0x7F) |
+| **0x3DE** | 0xDE | Register Bank Data (read/write selected register) |
+| **0x3D8** | 0xD8 | Mode Control Register (CGA compatible + extensions) |
+| **0x3D9** | 0xD9 | Color Select / Border Color (0–15) |
+| **0x3DA** | 0xDA | Status Register (bit 0=HSync, bit 3=VBlank) |
 
-Note: 0xDD/0xDE and 0x3DD/0x3DE are aliases and work identically on PC1.
+Note: 0x3D* and 0xD* are aliases and work identically on PC1. This document uses 0x3D* for CGA compatibility.
 
 ---
 
@@ -184,10 +184,10 @@ From the datasheet, the V6355D has strict timing requirements:
 ## ⭐ THE ONLY REQUIRED STEP:
 ```asm
 mov al, 0x4A        ; Magic value to unlock 16-color mode
-out 0xD8, al        ; Write to Mode Control Register
+out 0x3D8, al       ; Write to Mode Control Register
 ```
 
-**That's it!** Writing **0x4A to port 0xD8** is all you need to enable the hidden mode.
+**That's it!** Writing **0x4A to port 0x3D8** is all you need to enable the hidden mode.
 
 Bit breakdown of **0x4A** (01001010b):
 - Bit 0: [0] = 40-column text mode
@@ -210,9 +210,9 @@ Useful if you want BIOS to initialize CRTC timing before switching to hidden mod
 ### Optional: Configure Register 0x67 (Horizontal Position)
 ```asm
 mov al, 0x67
-out 0xDD, al        ; Select register 0x67
+out 0x3DD, al       ; Select register 0x67
 mov al, 0x18        ; 8-bit bus mode + horizontal position
-out 0xDE, al
+out 0x3DE, al
 ```
 Bit breakdown:
 - Bit 7: [0] = 8-bit bus mode (PC1 has 8-bit bus, NOT 16-bit!)
@@ -226,9 +226,9 @@ Bit breakdown:
 ### Optional: Configure Register 0x65 (Monitor Control)
 ```asm
 mov al, 0x65
-out 0xDD, al        ; Select register 0x65
+out 0x3DD, al       ; Select register 0x65
 mov al, 0x09        ; 200 lines, PAL, color, CRT
-out 0xDE, al
+out 0x3DE, al
 ```
 Bit breakdown:
 - Bits 0-1: [01] = 200 vertical lines (00=192, 01=200, 10=204)
@@ -244,7 +244,7 @@ Bit breakdown:
 ### Optional: Set Border Color
 ```asm
 xor al, al
-out 0xD9, al        ; Black border (color 0-15)
+out 0x3D9, al       ; Black border (color 0-15)
 ```
 
 ---
@@ -272,7 +272,7 @@ Byte 2: [0GGG0BBB]  Green (bits 4-6) + Blue (bits 0-2)
 ```asm
 cli                         ; Disable interrupts during palette write
 mov al, 0x40
-out 0xDD, al                ; Enable palette write mode (starts at color 0)
+out 0x3DD, al               ; Enable palette write mode (starts at color 0)
 jmp short $+2               ; I/O delay required!
 
 ; Write 32 bytes (16 colors × 2 bytes each)
@@ -280,12 +280,12 @@ mov cx, 32
 mov si, palette_data
 .loop:
     lodsb
-    out 0xDE, al
+    out 0x3DE, al
     jmp short $+2           ; I/O delay required between writes!
     loop .loop
 
 mov al, 0x80
-out 0xDD, al                ; Disable palette write mode
+out 0x3DD, al               ; Disable palette write mode
 sti
 ```
 
@@ -296,7 +296,7 @@ sti
 
 ; Red byte (bits 0-2)
 shr al, 5                   ; Red >> 5 → 3-bit value
-out 0xDE, al                ; Write red byte
+out 0x3DE, al               ; Write red byte
 
 ; Green|Blue byte
 mov al, bh                  ; Green
@@ -306,7 +306,7 @@ mov ah, al                  ; Save green
 mov al, bl                  ; Blue  
 shr al, 5                   ; Convert to 3-bit
 or al, ah                   ; Combine: 0GGG0BBB
-out 0xDE, al                ; Write green|blue byte
+out 0x3DE, al               ; Write green|blue byte
 ```
 
 ### Color Intensity Levels:
@@ -583,7 +583,7 @@ interrupt8:
 
 ### Reference: palram5.asm Implementation
 
-The palram5.asm file in PC1-Labs/demos/05-scanline-palette/ demonstrates this technique:
+The palram5.asm file in PC1-Labs/demos/05-palette-ram-rasters/ demonstrates this technique:
 - Polls HSYNC for synchronization
 - Setup during HBLANK to minimize jitter
 - Uses 3-NOP delays (no large loops)
@@ -611,10 +611,10 @@ The palram5.asm file in PC1-Labs/demos/05-scanline-palette/ demonstrates this te
 For flicker-free updates:
 ```asm
 mov al, 0x42        ; Graphics mode, video OFF (blanked)
-out 0xD8, al
+out 0x3D8, al
 ; ... update VRAM ...
 mov al, 0x4A        ; Graphics mode, video ON
-out 0xD8, al
+out 0x3D8, al
 ```
 
 ---
@@ -648,13 +648,13 @@ wait_vblank:
 disable_graphics_mode:
     ; Reset register 0x65
     mov al, 0x65
-    out 0xDD, al
+    out 0x3DD, al
     mov al, 0x09
-    out 0xDE, al
+    out 0x3DE, al
     
     ; Reset mode control to text mode
     mov al, 0x28        ; Text mode (bit 5=blink, bit 3=video on)
-    out 0xD8, al
+    out 0x3D8, al
     
     ; Restore BIOS text mode
     mov ax, 0x0003
@@ -1413,7 +1413,7 @@ For 320×200×4 color mode (which uses linear addressing naturally), the interla
 
 The key insight: The V6355D supports **per-scanline CGA palette switching** by writing to port 0x3D8 during horizontal blanking, allowing different color combinations on each horizontal line.
 
-**⚠️ Important clarification (addresses Section 12 contradiction):** This technique uses **port 0x3D8 (CGA Mode Control Register)**, which is a **single fast I/O write per scanline**. This is different from Section 12's "Racing the Beam" which attempted to modify individual palette RAM entries (0xDD/0xDE), which requires multiple slow writes and failed. By using the CGA mode byte instead, this technique avoids the speed limitation because it only needs 1 OUT instruction per line, not 32 bytes of palette data.
+**⚠️ Important clarification (addresses Section 12 contradiction):** This technique uses **port 0x3D8 (CGA Mode Control Register)**, which is a **single fast I/O write per scanline**. This is different from Section 12's "Racing the Beam" which attempted to modify individual palette RAM entries (0x3DD/0x3DE), which requires multiple slow writes and failed. By using the CGA mode byte instead, this technique avoids the speed limitation because it only needs 1 OUT instruction per line, not 32 bytes of palette data.
 
 #### The Two CGA Palettes (320×200×4 Mode)
 
@@ -1526,7 +1526,7 @@ palette_table:
 
 #### Potential for 160×200×16 Mode Extension
 
-An unexplored possibility: If the V6355D's palette registers (0xDD/0xDE) can be updated during HSync in the hidden 160×200×16 mode, this could theoretically provide **256+ virtual colors** with 16 colors per scanline. This remains untested.
+An unexplored possibility: If the V6355D's palette registers (0x3DD/0x3DE) can be updated during HSync in the hidden 160×200×16 mode, this could theoretically provide **256+ virtual colors** with 16 colors per scanline. This remains untested.
 
 #### CGA Mode Compatibility
 
@@ -1534,12 +1534,12 @@ An unexplored possibility: If the V6355D's palette registers (0xDD/0xDE) can be 
 
 | Mode | Resolution | Colors | PORT_COLOR Switching | Notes |
 |------|-----------|--------|----------------------|-------|
-| **160×200×16** | 160×200 | 16 palette colors | ✅ Yes | PC1 hidden mode - uses palette RAM (0xDD/0xDE) |
+| **160×200×16** | 160×200 | 16 palette colors | ✅ Yes | PC1 hidden mode - uses palette RAM (0x3DD/0x3DE) |
 | **320×200×4** | 320×200 | 4 colors (2 palettes) | ✅ Yes | Standard CGA - palette switching (port 0x3D8) - **Verified by Simone** |
 | **640×200×2** | 640×200 | 2 colors (monochrome) | ✅ Likely | Standard CGA/EGA - should work, untested |
 | **320×200×16** | 320×200 | 16 palette colors | ✅ Likely | Tandy/PC1 variant - timing compatible with 320×200×4 |
 
-**Why it works across modes:** The CRTC generates HSync pulses at the same frequency (19.2 kHz) regardless of video mode. Color register ports (0x3D8 for CGA, 0xDD/0xDE for palette) respond identically. Therefore, the per-scanline switching strategy is universal to CGA-compatible hardware.
+**Why it works across modes:** The CRTC generates HSync pulses at the same frequency (19.2 kHz) regardless of video mode. Color register ports (0x3D8 for CGA, 0x3DD/0x3DE for palette) respond identically. Therefore, the per-scanline switching strategy is universal to CGA-compatible hardware.
 
 #### Applications
 
@@ -1663,9 +1663,9 @@ For systems with 64KB video RAM (NOT PC1):
 | Screen size | 160×200×16 colors |
 | Bytes per row | 80 |
 | VRAM total | 16KB interlaced |
-| Mode unlock port | 0xD8 |
+| Mode unlock port | 0x3D8 |
 | Mode unlock value | **0x4A** |
-| Palette port | 0xDD/0xDE |
+| Palette port | 0x3DD/0x3DE |
 | Status port | 0x3DA (bit 3 = VBlank) |
 
 ---
@@ -1674,21 +1674,21 @@ For systems with 64KB video RAM (NOT PC1):
 
 The original document had several inaccuracies. Here are the corrections:
 
-1. **"C-ports (C0h–CFh)"** — WRONG. The mode control is at ports **0xD8/0xD9** and registers are accessed via **0xDD/0xDE**. There are no C0h-CFh ports.
+1. **"C-ports (C0h–CFh)"** — WRONG. The mode control is at ports **0x3D8/0x3D9** and registers are accessed via **0x3DD/0x3DE**. There are no C0h-CFh ports.
 
 2. **"FFFx ports required for ASIC reset"** — NOT REQUIRED for graphics mode. The working code does not use FFFx ports at all.
 
 3. **"1 byte = 1 pixel"** — WRONG. The mode uses **packed nibbles: 2 pixels per byte** (4bpp).
 
-4. **"We still need to find the exact values"** — SOLVED. The key is writing **0x4A to port 0xD8** (Mode Control Register with bit 6 set).
+4. **"We still need to find the exact values"** — SOLVED. The key is writing **0x4A to port 0x3D8** (Mode Control Register with bit 6 set).
 
-5. **"CRT controller (3DD/3DE) controls timing"** — PARTIALLY WRONG. Ports 0xDD/0xDE are the Register Bank ports for accessing internal V6355D registers (like 0x65 and 0x67), not just CRT timing.
+5. **"CRT controller (3DD/3DE) controls timing"** — PARTIALLY WRONG. Ports 0x3DD/0x3DE are the Register Bank ports for accessing internal V6355D registers (like 0x65 and 0x67), not just CRT timing.
 
 ---
 
 # 🟩 **Final One-Sentence Summary**
 
-**The PC1's hidden 160×200×16 graphics mode is enabled by a single I/O write: `OUT 0xD8, 0x4A` — that's all that's required, since the BIOS defaults for registers 0x65 and 0x67 are already correct for PAL/CRT operation.**
+**The PC1's hidden 160×200×16 graphics mode is enabled by a single I/O write: `OUT 0x3D8, 0x4A` — that's all that's required, since the BIOS defaults for registers 0x65 and 0x67 are already correct for PAL/CRT operation.**
 
 ---
 
@@ -1697,7 +1697,7 @@ The original document had several inaccuracies. Here are the corrections:
 ```asm
 ; Enable hidden 160x200x16 graphics mode (minimum required)
 mov al, 0x4A
-out 0xD8, al
+out 0x3D8, al
 
 ; Now write pixels to B000:0000
 ; High nibble = left pixel, Low nibble = right pixel
@@ -1709,7 +1709,7 @@ stosb
 
 ; Return to text mode when done
 mov al, 0x28
-out 0xD8, al
+out 0x3D8, al
 mov ax, 0x0003
 int 0x10
 ```
