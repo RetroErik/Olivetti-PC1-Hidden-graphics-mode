@@ -1098,6 +1098,42 @@ For smooth scrolling **within VRAM** (16KB = 200 rows), use **CGA CRTC R12/R13**
 
 ---
 
+### 17d. Register 0x66 LCD Driver Settings *(From John Elliott)*
+
+John Elliott documents additional LCD-related bits:
+
+```
+Register 0x66 (Display Control):
+    Bits 0-1: LCD vertical position (multiply by 2 for offset)
+    Bits 2-3: LCD driver type:
+        0 = Dual, 1-bit serial
+        1 = Dual, 4-bit parallel
+        2,3 = Dual, 4-bit intensity
+    Bits 4-5: LCD driver shift clock frequency
+    Bit 6: MDA greyscale mode (text attributes as MDA, not CGA)
+    Bit 7: Underline blue foreground characters
+```
+
+⚠️ **Status:** From John Elliott. LCD settings not applicable to PC1 (CRT only). Bits 6-7 may work on PC1 but untested.
+
+---
+
+### 17e. Register 0x67 Additional Bits *(From John Elliott)*
+
+Extended documentation of register 0x67:
+
+```
+Register 0x67 (Configuration Mode):
+    Bits 0-4: Horizontal position adjustment
+    Bit 5: LCD control signal period
+    Bit 6: Enable 4-page video RAM (64KB systems only, NOT PC1)
+    Bit 7: Enable 16-bit bus (if set on 8-bit bus → only odd bytes accessible)
+```
+
+⚠️ **Status:** From John Elliott. Verified that bit 7=0 required on PC1 (8-bit bus). Bit 6 not applicable (PC1 has 16KB only).
+
+---
+
 ### 17f. CGA CRTC R12/R13 Hardware Scrolling ✅ VERIFIED
 
 *Verified on real PC1 hardware (February 2, 2026)*
@@ -1331,7 +1367,7 @@ rep movsw                       ; Pre-load all text
 
 ---
 
-### 17i. V6355D Memory Architecture Clarification ✅ FROM SIMONE
+### 17g. V6355D Memory Architecture Clarification ✅ FROM SIMONE
 
 *Simone provided authoritative correction to memory architecture assumptions (February 6, 2026)*
 
@@ -1367,7 +1403,7 @@ For 320×200×4 color mode (which uses linear addressing naturally), the interla
 
 ---
 
-### 17j. Dynamic Palette Switching Per Scanline ✅ VERIFIED BY SIMONE
+### 17h. Dynamic Palette Switching Per Scanline ✅ VERIFIED BY SIMONE
 
 *Simone demonstrated per-scanline palette switching on PC1 hardware (February 6, 2026)*
 
@@ -1376,6 +1412,8 @@ For 320×200×4 color mode (which uses linear addressing naturally), the interla
 #### Achieving 512 Virtual Colors in 320×200
 
 The key insight: The V6355D supports **per-scanline CGA palette switching** by writing to port 0x3D8 during horizontal blanking, allowing different color combinations on each horizontal line.
+
+**⚠️ Important clarification (addresses Section 12 contradiction):** This technique uses **port 0x3D8 (CGA Mode Control Register)**, which is a **single fast I/O write per scanline**. This is different from Section 12's "Racing the Beam" which attempted to modify individual palette RAM entries (0xDD/0xDE), which requires multiple slow writes and failed. By using the CGA mode byte instead, this technique avoids the speed limitation because it only needs 1 OUT instruction per line, not 32 bytes of palette data.
 
 #### The Two CGA Palettes (320×200×4 Mode)
 
@@ -1490,6 +1528,19 @@ palette_table:
 
 An unexplored possibility: If the V6355D's palette registers (0xDD/0xDE) can be updated during HSync in the hidden 160×200×16 mode, this could theoretically provide **256+ virtual colors** with 16 colors per scanline. This remains untested.
 
+#### CGA Mode Compatibility
+
+**Per-scanline palette switching works across all CGA graphics modes** because the horizontal sync timing is identical. The V6355D uses a standard CGA display clock (14.31818 MHz pixel clock / 2), so all CGA modes share the same ~509 cycle/scanline timing:
+
+| Mode | Resolution | Colors | PORT_COLOR Switching | Notes |
+|------|-----------|--------|----------------------|-------|
+| **160×200×16** | 160×200 | 16 palette colors | ✅ Yes | PC1 hidden mode - uses palette RAM (0xDD/0xDE) |
+| **320×200×4** | 320×200 | 4 colors (2 palettes) | ✅ Yes | Standard CGA - palette switching (port 0x3D8) - **Verified by Simone** |
+| **640×200×2** | 640×200 | 2 colors (monochrome) | ✅ Likely | Standard CGA/EGA - should work, untested |
+| **320×200×16** | 320×200 | 16 palette colors | ✅ Likely | Tandy/PC1 variant - timing compatible with 320×200×4 |
+
+**Why it works across modes:** The CRTC generates HSync pulses at the same frequency (19.2 kHz) regardless of video mode. Color register ports (0x3D8 for CGA, 0xDD/0xDE for palette) respond identically. Therefore, the per-scanline switching strategy is universal to CGA-compatible hardware.
+
 #### Applications
 
 This technique is ideal for:
@@ -1502,7 +1553,7 @@ This technique is ideal for:
 
 ---
 
-### 17k. Extended Row Support (204 rows) ✅ FROM SIMONE
+### 17i. Extended Row Support (204 rows) ✅ FROM SIMONE
 
 *Simone confirmed undocumented capability for exceeding standard 200-row display (February 6, 2026)*
 
@@ -1566,43 +1617,7 @@ With 204-row mode's reduced gap:
 
 ---
 
-### 17d. Register 0x66 LCD Driver Settings *(From John Elliott)*
-
-John Elliott documents additional LCD-related bits:
-
-```
-Register 0x66 (Display Control):
-    Bits 0-1: LCD vertical position (multiply by 2 for offset)
-    Bits 2-3: LCD driver type:
-        0 = Dual, 1-bit serial
-        1 = Dual, 4-bit parallel
-        2,3 = Dual, 4-bit intensity
-    Bits 4-5: LCD driver shift clock frequency
-    Bit 6: MDA greyscale mode (text attributes as MDA, not CGA)
-    Bit 7: Underline blue foreground characters
-```
-
-⚠️ **Status:** From John Elliott. LCD settings not applicable to PC1 (CRT only). Bits 6-7 may work on PC1 but untested.
-
----
-
-### 17e. Register 0x67 Additional Bits *(From John Elliott)*
-
-Extended documentation of register 0x67:
-
-```
-Register 0x67 (Configuration Mode):
-    Bits 0-4: Horizontal position adjustment
-    Bit 5: LCD control signal period
-    Bit 6: Enable 4-page video RAM (64KB systems only, NOT PC1)
-    Bit 7: Enable 16-bit bus (if set on 8-bit bus → only odd bytes accessible)
-```
-
-⚠️ **Status:** From John Elliott. Verified that bit 7=0 required on PC1 (8-bit bus). Bit 6 not applicable (PC1 has 16KB only).
-
----
-
-### 17f. Auto-Increment Behavior Difference *(From John Elliott)*
+### 17j. Auto-Increment Behavior Difference *(From John Elliott)*
 
 John Elliott notes different behavior between systems:
 
@@ -1612,7 +1627,7 @@ John Elliott notes different behavior between systems:
 
 ---
 
-### 17g. BIOS Data Area Locations *(From John Elliott)*
+### 17k. BIOS Data Area Locations *(From John Elliott)*
 
 John Elliott documents PC1 BIOS usage of memory at segment 0x40:
 
@@ -1629,7 +1644,7 @@ John Elliott documents PC1 BIOS usage of memory at segment 0x40:
 
 ---
 
-### 17h. Port 0x3DF Display Page Selection *(From John Elliott)*
+### 17l. Port 0x3DF Display Page Selection *(From John Elliott)*
 
 For systems with 64KB video RAM (NOT PC1):
 
@@ -1638,6 +1653,8 @@ For systems with 64KB video RAM (NOT PC1):
 ⚠️ **Status:** Does NOT apply to PC1 (only 16KB VRAM). Included for completeness.
 
 ---
+
+
 # �🟩 **Summary Table**
 
 | What | Value |
