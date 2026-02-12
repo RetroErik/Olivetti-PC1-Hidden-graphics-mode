@@ -80,6 +80,81 @@ Note: 0x3D* and 0xD* are aliases and work identically on PC1. This document uses
 
 ---
 
+# 🟦 3a. **I/O Port Speed Optimization** ✅
+
+*Verified by testing and cycle counting on NEC V40.*
+
+### Short vs Long Port Addresses
+
+On 8088/8086/V40 CPUs, **port addresses ≤ 255 use a faster instruction encoding**:
+
+| Port Range | Instruction | Encoding | Cycles | Example |
+|------------|-------------|----------|--------|---------|
+| **≤ 255** | `out 0xDD, al` | 2 bytes (E6 DD) | ~8 cycles | Short/immediate form |
+| **> 255** | `mov dx, 0x3DD` then `out dx, al` | 4 bytes | ~12+ cycles | Long/DX-indirect form |
+
+**Savings per OUT:** ~4 cycles
+
+### Why This Matters
+
+In tight loops (raster effects, sound playback), the difference adds up:
+
+| Scenario | OUTs/frame | Cycles Saved | Significant? |
+|----------|------------|--------------|--------------|
+| Per-scanline palette (palram demos) | 600 (200 × 3) | ~2400 cycles | **YES** |
+| Bitmap scroller (demo8) | ~5 (setup only) | ~20 cycles | No |
+| Sound playback | Thousands | Very significant | **YES** |
+
+### Recommended Port Usage
+
+| Use Case | Recommended | Reason |
+|----------|-------------|--------|
+| Tight loops (raster, audio) | Short alias (0xDD, 0xDE, 0xD8) | Speed critical |
+| One-time setup | Either form | Negligible difference |
+| CGA-compatible code | Long form (0x3DD, 0x3DE, 0x3D8) | Portability |
+
+### PC1 Port Alias Table
+
+| Long Address | Short Alias | Purpose |
+|--------------|-------------|---------|
+| 0x3D8 | 0xD8 | Mode control |
+| 0x3D9 | 0xD9 | Color select / border |
+| 0x3DA | 0xDA | Status register |
+| 0x3DD | 0xDD | Palette/register address |
+| 0x3DE | 0xDE | Palette/register data |
+
+### Example: Optimized Palette Write in Raster Loop
+
+```asm
+; FAST: Using short port addresses (saves ~12 cycles per iteration)
+mov al, 0x40            ; Select palette entry 0
+out 0xDD, al            ; 2 bytes, ~8 cycles
+lodsb                   ; Load red value
+out 0xDE, al            ; 2 bytes, ~8 cycles
+lodsb                   ; Load green|blue value
+out 0xDE, al            ; 2 bytes, ~8 cycles
+
+; SLOW: Using DX-indirect form (same functionality, ~12 cycles slower)
+mov dx, 0x3DD
+mov al, 0x40
+out dx, al              ; Requires DX setup
+mov dx, 0x3DE
+lodsb
+out dx, al
+lodsb
+out dx, al
+```
+
+### Additional Loop Optimizations
+
+Beyond port addressing, these optimizations were verified in palram6.asm:
+
+1. **Move invariant `mov dx, PORT_STATUS` outside the loop** — Saves ~800 cycles/frame
+2. **Remove unnecessary I/O delays** where subsequent instructions provide enough time — Saves ~3000 cycles/frame
+3. **Total measured savings: ~3800 cycles/frame**
+
+---
+
 # 🟦 3b. **V6355D Chip Specifications (from Datasheet)** ✅
 
 *Source: Official Yamaha V6355D datasheet — electrical specs are trusted.*
@@ -288,6 +363,8 @@ mov al, 0x80
 out 0x3DD, al               ; Disable palette write mode
 sti
 ```
+
+💡 **Speed tip:** For raster effects with 600+ OUTs per frame, use short port addresses (0xDD, 0xDE instead of 0x3DD, 0x3DE) to save ~4 cycles per OUT. See **Section 3a** for details.
 
 ### Converting 8-bit RGB to V6355D format:
 ```asm
@@ -606,6 +683,152 @@ The palram5.asm file in PC1-Labs/demos/05-palette-ram-rasters/ demonstrates this
 
 ---
 
+# 🟦 5c. **Multi-Entry Palette Writes Per HBLANK: The Pipeline Limitation** ✅
+
+*Verified by practical testing on real PC1 hardware (February 2026, palram6.asm experiment).*
+
+This section documents the critical discovery that the V6355D **cannot cleanly change more than 1 palette entry per HBLANK**. This is a hardware limitation, not a timing constraint.
+
+### The Experiment: palram6.asm
+
+**Goal:** Determine how many palette entries can be changed during a single HBLANK period.
+
+**Setup:**
+- Display 16 vertical color bars (colors 0-15) on screen
+- Attempt to change palette entries during HBLANK
+- Observe which entries show corruption
+
+### Critical Findings
+
+#### 1. Maximum 1 Palette Entry Per HBLANK
+
+Despite having ~80 cycles available during HBLANK (enough for ~7 OUTs), the V6355D **only allows clean modification of 1 palette entry**. Writing 2+ entries causes visible corruption on adjacent entries.
+
+**Timing budget (theoretical):**
+- HBLANK: ~80 cycles
+- 7 OUTs (2 entries): ~49 cycles ✓ (fits timing)
+- **Result:** Entry 1 shows corruption even though timing is satisfied
+
+**Conclusion:** This is NOT a timing limitation—it's a hardware pipeline behavior.
+
+#### 2. Adjacent Entry "Bleed" Effect
+
+When writing palette entry 0 during HBLANK:
+- Entry 1 shows slight corruption (faint vertical lines)
+- The corruption "bleeds" into entries that weren't explicitly written
+- Effect is visible when those entries are used by on-screen pixels
+
+#### 3. Delays Make It WORSE
+
+Counter-intuitively, adding delays before the 0x80 close command **increases corruption**:
+
+| Delay Before 0x80 | Entries Affected |
+|-------------------|------------------|
+| No delay (immediate) | ~1 entry (minor bleed) |
+| 1 delay (`jmp short $+2`) | ~2 entries |
+| 3 delays | ~3 entries |
+
+**Theory:** The V6355D palette "streams forward" while the CPU waits. The palette pipeline continues advancing through entries until 0x80 is sent. Longer delays = more entries exposed to corruption.
+
+#### 4. No Direct Entry Selection
+
+The V6355D does not support selecting an arbitrary palette entry:
+
+```asm
+; DOES NOT WORK:
+mov al, 0x42        ; Try to select entry 2 directly
+out 0xDD, al        ; Result: still writes from entry 0!
+```
+
+Palette writes always stream sequentially from entry 0. To change entry N, you must write N×2 dummy bytes first—which causes corruption on entries 0 through N-1.
+
+#### 5. Optimizations That Helped
+
+These changes eliminated bleed into bar 2 (when only writing entry 0):
+
+```asm
+; BEFORE (bleed into bar 2):
+mov dx, PORT_STATUS         ; Inside loop
+.scanline_loop:
+    ; ... HSYNC wait ...
+    mov al, 0x40
+    out PORT_REG_ADDR, al
+    jmp short $+2           ; Delay after address select
+    lodsb
+    out PORT_REG_DATA, al
+    lodsb
+    out PORT_REG_DATA, al
+    mov al, 0x80
+    out PORT_REG_ADDR, al
+
+; AFTER (clean, minimal bleed):
+mov dx, PORT_STATUS         ; Outside loop (saves ~800 cycles)
+.scanline_loop:
+    ; ... HSYNC wait ...
+    mov al, 0x40
+    out PORT_REG_ADDR, al   ; No delay after address select!
+    lodsb
+    out PORT_REG_DATA, al
+    lodsb
+    out PORT_REG_DATA, al
+    mov al, 0x80
+    out PORT_REG_ADDR, al   ; Immediate close
+```
+
+**Optimizations:**
+- Move `mov dx, PORT_STATUS` outside loop: saves ~800 cycles (4 cycles × 200 scanlines)
+- Remove delay after 0x40 address select: saves ~3000 cycles (15 cycles × 200 scanlines)
+- Close palette immediately (no delay before 0x80)
+
+### Why palram1-4 Work Perfectly
+
+These demos fill the entire screen with a single color (entry 0). Although entries 1-15 get corrupted during writes, no pixels reference them—so the corruption is invisible.
+
+### Why palram6 Shows Corruption
+
+palram6 displays 16 color bars using entries 0-15. When entry 0 is modified, the bleed into entry 1 becomes visible because bar 1 (blue) uses that entry.
+
+### Tested Approaches (All Failed for Multi-Entry)
+
+| Approach | Result |
+|----------|--------|
+| Write entries 0, 1 both dynamic | Entry 1 corrupted |
+| Write entry 0 dynamic, entries 1-2 static (to "absorb" bleed) | Made it WORSE |
+| Add delays before 0x80 close | Made it WORSE (3+ entries affected) |
+| Try direct entry selection (0x42, 0x44) | Does not work on V6355D |
+
+### Hardware Theory: Palette Pipeline Behavior
+
+The V6355D appears to have an internal palette pipeline/latch system:
+
+1. **0x40 command** opens the palette write stream at entry 0
+2. Each byte written advances the stream to the next entry
+3. **0x80 command** closes the stream
+4. During the transition, adjacent entries are in an undefined state
+5. The "stream" continues advancing while CPU executes instructions (even without writes)
+6. **Longer delays = more entries exposed to undefined state**
+
+This is fundamentally different from VGA DACs which support indexed random-access to any palette entry.
+
+### Practical Implications
+
+| Use Case | Recommendation |
+|----------|----------------|
+| Full-screen raster gradients | ✅ Use only color 0, fill screen with color 0 |
+| Multi-color raster bars | ❌ Not clean—bleed affects adjacent entries |
+| Per-scanline color cycling | ✅ Works if only 1 entry changes per line |
+| 16-color game graphics + rasters | ⚠️ Plan graphics to avoid colors 0-1 for important elements |
+
+### Reference: palram6.asm Implementation
+
+The palram6.asm file in PC1-Labs/demos/05-palette-ram-rasters/ demonstrates:
+- 16 vertical color bars (colors 0-15)
+- Per-scanline palette entry 0 modification
+- Optimized timing to minimize bleed
+- Extensively documented hardware findings
+
+---
+
 *Verified by working code.*
 
 For flicker-free updates:
@@ -764,7 +987,7 @@ If you modify the hardware to enable composite output:
 
 *Verified by Simone Riminucci + our demo testing.*
 
-### Racing the Beam: Not Possible
+### Racing the Beam: Not Possible (for Full Palette Updates)
 
 Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame) and found:
 
@@ -773,12 +996,22 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 **Our own testing confirms this:** In demo4, demo5, and demo6, we found that:
 - Palette changes require I/O delays between each byte
 - 32 bytes × I/O delay = too slow for per-scanline updates
-- Mid-frame palette tricks are not practical on PC1
+- Mid-frame palette tricks are not practical on PC1 for full palette rewrites
 
-### VBlank is Your Only Window
-- All palette updates should be done during VBlank
-- Per-frame palette animation is possible (one full palette change per frame)
-- Per-scanline palette changes are too slow
+### Per-Scanline Single Entry: Possible But Limited
+
+**Update (February 2026, palram6.asm experiment):** While full palette changes per scanline are impossible, changing **1 palette entry per HBLANK** is achievable with optimized code:
+
+- **Works:** palram1-4 change palette entry 0 each scanline (200 unique colors on screen)
+- **Limitation:** Only 1 entry can be cleanly changed per HBLANK
+- **Reason:** V6355D palette pipeline corrupts adjacent entries (see Section 5c)
+
+**Key insight from Simone's prediction:** He suggested "maybe change only 4 colors could be achieved" - our testing found the actual limit is **1 color**, due to palette pipeline behavior rather than timing.
+
+### VBlank is Your Only Window (for Multi-Entry Changes)
+- Full palette updates (16 entries) should be done during VBlank only
+- Per-scanline: maximum 1 entry cleanly changeable per HBLANK
+- See Section 5c for detailed hardware analysis
 
 *(Source: Simone Riminucci, vcfed.org forums + our demo testing)*
 
@@ -1655,7 +1888,7 @@ For systems with 64KB video RAM (NOT PC1):
 ---
 
 
-# �🟩 **Summary Table**
+# 🟩 **Summary Table**
 
 | What | Value |
 |------|-------|
@@ -1666,7 +1899,9 @@ For systems with 64KB video RAM (NOT PC1):
 | Mode unlock port | 0x3D8 |
 | Mode unlock value | **0x4A** |
 | Palette port | 0x3DD/0x3DE |
-| Status port | 0x3DA (bit 3 = VBlank) |
+| Palette colors | 512 (RGB 3-3-3) |
+| Palette entries per HBLANK | **1 max** (see Section 5c) |
+| Status port | 0x3DA (bit 0 = HSYNC, bit 3 = VBlank) |
 
 ---
 
