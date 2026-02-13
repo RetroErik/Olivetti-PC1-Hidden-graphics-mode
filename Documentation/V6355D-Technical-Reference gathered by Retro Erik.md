@@ -987,16 +987,18 @@ If you modify the hardware to enable composite output:
 
 *Verified by Simone Riminucci + our demo testing.*
 
-### Racing the Beam: Not Possible (for Full Palette Updates)
+### Racing the Beam: Not Possible (for Full Palette Updates in a Single Mode)
 
 Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame) and found:
 
 > *"All tests to race the beam failed also on line basis. Changing 16 colors per line is too slow also for 80186, and I need to use many OUTs... maybe change only 4 colors could be achieved... but per line."*
 
-**Our own testing confirms this:** In demo4, demo5, and demo6, we found that:
+**Our own testing confirms this for single-mode operation:** In demo4, demo5, and demo6, we found that:
 - Palette changes require I/O delays between each byte
 - 32 bytes × I/O delay = too slow for per-scanline updates
-- Mid-frame palette tricks are not practical on PC1 for full palette rewrites
+- Mid-frame palette tricks are not practical on PC1 for full palette rewrites **in a single video mode**
+
+**⚠️ UPDATE (February 2026):** When combined with **CGA palette flipping** (Section 17h), visible-area palette writes become viable. The key insight: while palette 0 is being drawn, entries {1, 3, 5, 7} are inactive and can be safely reprogrammed. Then you flip to palette 1, and entries {0, 2, 4, 6} become safe. This divides the workload across two scanlines and avoids writing entries the beam is actively reading. Streaming all 8 entries via 0xDD/0xDE takes ~160 cycles — well within the ~424 cycle visible-area budget. See cgaflip4.asm for a working demo.
 
 ### Per-Scanline Single Entry: Possible But Limited
 
@@ -1644,55 +1646,65 @@ For 320×200×4 color mode (which uses linear addressing naturally), the interla
 
 #### Achieving 512 Virtual Colors in 320×200
 
-The key insight: The V6355D supports **per-scanline CGA palette switching** by writing to port 0x3D8 during horizontal blanking, allowing different color combinations on each horizontal line.
+The key insight: The V6355D supports **per-scanline CGA palette switching** by writing to port 0x3D9 (Color Select Register) during horizontal blanking, allowing different color combinations on each horizontal line.
 
-**⚠️ Important clarification (addresses Section 12 contradiction):** This technique uses **port 0x3D8 (CGA Mode Control Register)**, which is a **single fast I/O write per scanline**. This is different from Section 12's "Racing the Beam" which attempted to modify individual palette RAM entries (0x3DD/0x3DE), which requires multiple slow writes and failed. By using the CGA mode byte instead, this technique avoids the speed limitation because it only needs 1 OUT instruction per line, not 32 bytes of palette data.
+**⚠️ CORRECTION (February 2026 — verified by Retro Erik on real PC1 hardware):** The original text here said port 0x3D8 (Mode Control Register). This is **wrong**. Palette select, background color, and intensity are all controlled by **port 0x3D9 (Color Select Register)**. Testing on V6355D hardware confirmed that writing bit 5 of 0x3D8 does NOT switch the palette — it produces solid colors with no alternation. Only 0x3D9 bit 5 works for palette select.
+
+**⚠️ Important clarification (addresses Section 12 contradiction):** Section 12 concluded that per-scanline palette RAM writes via 0x3DD/0x3DE are too slow for full palette updates. This is true when trying to rewrite all 16 entries in a single mode — but **CGA palette flipping changes the equation entirely**. By alternating between palette 0 and palette 1 every scanline, you only need to update the entries belonging to the **inactive** palette (the one not currently being drawn). While palette 0 is displayed on an even line, entries {1, 3, 5, 7} (palette 1's entries) are not being read by the video hardware and can be safely reprogrammed. Then you flip to palette 1, and entries {0, 2, 4, 6} become safe to write. This is the key insight that makes visible-area palette writes viable — and why it only works in combination with CGA palette flipping.
+
+**Advanced variant (verified working — cgaflip4.asm):** The palette flip (1 OUT to 0xD9) is done during HBLANK, then all 8 palette entries are streamed via 0xDD/0xDE during the visible area (~160 cycles of the ~424 cycle visible-area budget). The inactive palette's entries update cleanly. Writing the active palette's entries also works on V6355D but may produce minor horizontal glitches (the beam may momentarily read a partially-updated color). See PC1-Labs/demos/07-cga-palette-flip/cgaflip4.asm.
 
 #### The Two CGA Palettes (320×200×4 Mode)
 
-In standard CGA 320×200×4 color mode, you have **4 simultaneous colors**: one background + three foreground colors from a fixed palette.
+In CGA 320×200×4 color mode, each 2-bit pixel value maps to a V6355D palette entry. Which set of entries is used depends on the palette selected via port 0x3D9 bit 5:
 
-```
-Palette 0 (Cyan/Magenta/White):
-  Background: Any of 16 colors (selectable)
-  Foreground 1: Cyan (dark or bright)
-  Foreground 2: Magenta (dark or bright)
-  Foreground 3: White (dark or bright)
+**V6355D Palette Entry Mapping (bg = entry 0):**
 
-Palette 1 (Green/Red/Yellow):
-  Background: Any of 16 colors (selectable)
-  Foreground 1: Green (dark or bright)
-  Foreground 2: Red (dark or bright)
-  Foreground 3: Yellow/Brown (dark or bright)
-```
+| Pixel Value | Palette 0 (bit 5=0) | Palette 1 (bit 5=1) |
+|:-----------:|:--------------------:|:--------------------:|
+| 0           | entry 0 (bg/border)  | entry 0 (bg/border)  |
+| 1           | entry 2              | entry 3              |
+| 2           | entry 4              | entry 5              |
+| 3           | entry 6              | entry 7              |
 
-**Controlled by:** Port 0x3D8 (CGA Mode Control Register)
+**Entry 1 is unused** — no pixel value maps to it when bg = entry 0. It must still be streamed through when writing entries 2+ (V6355D streams sequentially from entry 0).
+
+On standard IBM CGA, the palette entries have fixed RGBI colors (Palette 0 = Cyan/Magenta/White, Palette 1 = Green/Red/Brown). On the **V6355D, all 8 entries are fully programmable** to any RGB333 color via ports 0x3DD/0x3DE. The CGA default names are just power-on defaults — the V6355D can display any color in any entry.
+
+**Controlled by:** Port 0x3D9 (Color Select Register) — **NOT 0x3D8 as previously documented**
 - Bit 5: Palette select (0 = Palette 0, 1 = Palette 1)
-- Bit 4: Intensity (0 = dark colors, 1 = bright colors)
-- Bits 0-3: Background color (0-15)
+- Bit 4: Intensity (0 = normal, 1 = intensified) — applies to standard CGA RGBI output; on V6355D with RGB333 palette, this has no visible effect on the analog RGB output
+- Bits 3-0: Background/border color entry index (0-15)
 
-#### Switching Strategy
+**⚠️ NOTE:** Bits 3-0 select the palette entry used for BOTH pixel-value-0 (background) AND the overscan border. These cannot be set independently — this is a hardwired CGA rule. If you change bits 3-0 per scanline, the border will flicker between the two entry colors. For a stable border, both PAL_EVEN and PAL_ODD must set the same value in bits 3-0 (e.g. both = 0 → entry 0 = black).
 
-**Basic concept:**
-1. **On Scanline N (during HSync):** Set Palette 0 + Background Color A + Intensity = Light
-2. **Display scanline** with Cyan/Magenta/White palette
-3. **On Scanline N+1 (during HSync):** Set Palette 1 + Background Color B + Intensity = Dark
-4. **Display scanline** with Green/Red/Yellow palette
-5. Repeat, alternating palettes and varying background colors per line
+#### Switching Strategy (V6355D — Proven on Real Hardware)
 
-**Timing:**
-- **HSync (horizontal blanking):** ~10 microseconds — safe time to update palette register
-- **Active line rendering:** ~51 microseconds — prepare next line's palette configuration
-- Each line gets **4 colors from one of two palettes**
+**The proven approach** (from cgaflip3/cgaflip4 experiments):
+1. **Both PAL_EVEN and PAL_ODD use the same bg/border entry** (both bits 3-0 = 0 → entry 0 = black). This keeps the border stable.
+2. **On even scanlines (during HBLANK):** Write 0x00 to 0xD9 → palette 0, bg = entry 0
+3. **Display scanline** using entries {0, 2, 4, 6}
+4. **On odd scanlines (during HBLANK):** Write 0x20 to 0xD9 → palette 1, bg = entry 0
+5. **Display scanline** using entries {0, 3, 5, 7}
+6. **During visible area:** Reprogram the inactive palette's entries via 0xDD/0xDE (e.g. on an even line, write entries 3, 5, 7 for the next odd line)
+7. Repeat for all 200 scanlines, with per-line colors from a precalculated table
 
-#### Result: 512 Virtual Colors
+**Timing (verified on V40 @ 8 MHz):**
+- **HBLANK:** ~80 CPU cycles — fits 1 palette flip OUT, or up to 9 short-form OUTs (flip + open + 3 entries + close)
+- **Visible area:** ~424 CPU cycles — fits full 8-entry palette stream (open + 16 LODSB/OUT + close ≈ 160 cycles)
+- **Total scanline:** ~509 cycles
+- Using short port aliases (0xD9 instead of 0x3D9) saves ~4 cycles per OUT on V40
 
-**Calculation:**
-- **2 palettes** (cyan/magenta/white vs green/red/yellow)
-- **16 background colors** per palette
-- **2 intensity levels** (dark vs bright foreground)
-- **8 combinations per palette** (16 backgrounds × 2 intensity ÷ mixing = effective combinations)
-- **Total: 2 × 16 × 16 = 512 unique color combinations** across 200 scanlines
+#### Result: 512 Colors from the RGB333 Palette
+
+The "512 virtual colors" comes from the **V6355D's RGB333 palette**, not from CGA register combinatorics:
+
+- Each palette entry is programmed to any **RGB333 color** (3 bits per channel)
+- $2^3 × 2^3 × 2^3 = 512$ possible colors per entry
+- With per-scanline palette reprogramming, **every entry can be a different RGB333 color on every line**
+- 6 visible entries per line (entries 2-7, since 0=bg and 1=unused) × 200 lines = up to **1200 independently chosen colors per frame**, all from the 512-color RGB333 space
+
+On standard IBM CGA (without programmable palette), per-scanline palette flipping would only give you 2 palettes × 16 backgrounds × 2 intensity = 64 combinations. The V6355D's programmable RGB333 palette is what makes the full 512-color space accessible.
 
 Different scanlines can show completely different color sets, creating the appearance of far more than 4 simultaneous colors when viewed as a whole screen.
 
@@ -1700,42 +1712,59 @@ Different scanlines can show completely different color sets, creating the appea
 
 1. **Mode:** CGA 320×200×4 (standard CGA graphics mode)
 2. **Precise timing:** HSync interrupt or CRTC-based synchronization required
-3. **Fast port writes:** Port 0x3D8 (Mode Control Register) updated every scanline
+3. **Fast port writes:** Port 0x3D9 (Color Select Register) updated every scanline
 4. **Pre-calculated palette table:** 200-entry table with palette/background/intensity per line
 5. **V6355D compatibility:** ✅ **VERIFIED working on PC1** (Simone, February 2026)
 
 #### Code Strategy
 
 ```asm
-; Pseudocode for per-scanline palette switching (320×200×4 mode)
+; Pseudocode for per-scanline palette switching + palette RAM update (320×200×4)
+; Uses short port aliases (0xD9 not 0x3D9) for speed on V40
 
     ; Enable 320×200×4 graphics mode
     mov ax, 0x0004
     int 0x10
-    
-scanline_loop:
-    ; Wait for HSync (horizontal retrace)
-    call wait_hsync
-    
-    ; Get palette byte for current scanline
-    mov al, [palette_table + si]
-    inc si
-    
-    ; Update CGA mode control register
-    ; (changes palette, intensity, background instantly)
-    mov dx, 0x3D8
-    out dx, al
-    
-    ; Loop until all 200 scanlines rendered
-    cmp si, 200
-    jl scanline_loop
 
-; Palette table (200 bytes, one per scanline):
-palette_table:
-    db 0x1D    ; Line 0: Palette 0, Bright, Background=Blue
-    db 0x2E    ; Line 1: Palette 1, Bright, Background=Yellow
-    db 0x1A    ; Line 2: Palette 0, Bright, Background=Green
-    ; ...196 more entries
+    ; Program initial V6355D palette entries 0-7 via 0xDD/0xDE
+    call program_palette
+
+frame_loop:
+    call wait_vblank
+    mov si, gradient_table      ; 200 lines × 16 bytes = 3200 bytes
+    mov cx, 200
+    mov bl, 0x00                ; PAL_EVEN: palette 0, bg=entry 0
+    mov bh, 0x20                ; PAL_ODD:  palette 1, bg=entry 0
+
+scanline_loop:
+    ; Wait for HBLANK
+    call wait_hsync
+
+    ; === HBLANK: flip palette (1 fast OUT) ===
+    mov al, bl
+    out 0xD9, al                ; Color Select Register (NOT 0xD8!)
+
+    ; === VISIBLE AREA: stream all 8 entries from table ===
+    mov al, 0x40
+    out 0xDD, al                ; Open palette at entry 0
+    %rep 16
+    lodsb
+    out 0xDE, al                ; Stream 8 entries × 2 bytes each
+    %endrep
+    mov al, 0x80
+    out 0xDD, al                ; Close palette
+
+    xchg bl, bh                 ; Swap even/odd for next line
+    loop scanline_loop
+    jmp frame_loop
+
+; Gradient table: 16 bytes per line (entries 0-7, 2 bytes each)
+; Entries 0,1 = always 0,0 (black bg + unused)
+; Entries 2-7 = per-line RGB333 colors from 512-color space
+gradient_table:
+    db 0,0, 0,0, 7,0x00, 7,0x10, 0,0x70, 0,0x71, 7,0x70, 7,0x71  ; Line 0
+    db 0,0, 0,0, 7,0x10, 7,0x20, 0,0x71, 0,0x72, 7,0x71, 7,0x72  ; Line 1
+    ; ...198 more lines
 ```
 
 #### Advantages Over Dithering
@@ -1768,11 +1797,11 @@ An unexplored possibility: If the V6355D's palette registers (0x3DD/0x3DE) can b
 | Mode | Resolution | Colors | PORT_COLOR Switching | Notes |
 |------|-----------|--------|----------------------|-------|
 | **160×200×16** | 160×200 | 16 palette colors | ✅ Yes | PC1 hidden mode - uses palette RAM (0x3DD/0x3DE) |
-| **320×200×4** | 320×200 | 4 colors (2 palettes) | ✅ Yes | Standard CGA - palette switching (port 0x3D8) - **Verified by Simone** |
+| **320×200×4** | 320×200 | 4 colors (2 palettes) | ✅ Yes | Standard CGA - palette switching (port 0x3D9) - **Verified by Simone + Retro Erik** |
 | **640×200×2** | 640×200 | 2 colors (monochrome) | ✅ Likely | Standard CGA/EGA - should work, untested |
 | **320×200×16** | 320×200 | 16 palette colors | ✅ Likely | Tandy/PC1 variant - timing compatible with 320×200×4 |
 
-**Why it works across modes:** The CRTC generates HSync pulses at the same frequency (19.2 kHz) regardless of video mode. Color register ports (0x3D8 for CGA, 0x3DD/0x3DE for palette) respond identically. Therefore, the per-scanline switching strategy is universal to CGA-compatible hardware.
+**Why it works across modes:** The CRTC generates HSync pulses at the same frequency (19.2 kHz) regardless of video mode. Color register ports (0x3D9 for CGA color select, 0x3DD/0x3DE for palette RAM) respond identically. Therefore, the per-scanline switching strategy is universal to CGA-compatible hardware.
 
 #### Applications
 
@@ -1783,6 +1812,23 @@ This technique is ideal for:
 - Games that can tolerate horizontal color banding
 
 **Note:** Requires precise HSync timing and pre-calculated palette tables. Not suitable for fast-moving horizontal graphics where per-line color changes would create visible artifacts.
+
+#### Verified Experimental Demos (Retro Erik, February 2026)
+
+The following demos in `PC1-Labs/demos/07-cga-palette-flip/` were tested and verified working on real PC1 hardware:
+
+| Demo | Technique | Result |
+|------|-----------|--------|
+| **cgaflip3** | Palette flip + entry 2 rainbow gradient, all during HBLANK (9 OUTs) | ✅ Working — smooth gradient on band 1, solid black border |
+| **cgaflip4** | Palette flip during HBLANK (1 OUT) + all 8 entries streamed during visible area (16 LODSB+OUT) | ✅ Working — rainbow gradients on all 3 bands, minor horizontal glitches |
+
+Key corrections from experimental verification:
+
+1. **Port 0x3D9 bit 5** controls palette select — NOT port 0x3D8 bit 5 (0xD8 bit 5 produces solid colors with no alternation on V6355D)
+2. **0xD9 bits 3-0** select the palette entry for both pixel-value-0 AND the border (hardwired CGA rule, cannot be separated)
+3. **V6355D palette writes stream sequentially from entry 0** — command 0x40 always opens at entry 0, no random access
+4. **Visible-area palette RAM writes are viable** — the V6355D accepts palette changes while the beam is drawing, with only minor glitches
+5. **9 short-form OUTs fit in a single HBLANK** (~80 cycles budget on V40 @ 8 MHz)
 
 ---
 
