@@ -29,20 +29,23 @@ Information from unverified sources is marked with *(unverified)* throughout thi
 
 ---
 
-# 🟦 1. **VRAM Layout** ✅
+# 🟦 1. **VRAM Layout** ⚠️
 
-*Verified by working code.*
+*Partially verified by working code and system memory map tools.*
 
-The PC1 has **16 KB of video RAM**, mirrored four times in the memory map:
+The PC1 has **16 KB of video RAM**, but the visible window appears to be **mode-dependent** on real hardware:
+
+- **Hidden graphics mode (160×200×16):** Use segment **B000h** (verified by code).
+- **CGA modes:** Use segment **B800h** (verified by code).
+
+**System memory map tool evidence (Feb 2026):**
 
 ```
-B0000–B3FFF  (16 KB)
-B4000–B7FFF  (mirror)
-B8000–BBFFF  (mirror)
-BC000–BFFFF  (mirror)
+B8000–BBFFF  (32 KB Hi RAM)
+BC000–BFFFF  (16 KB CGA Video RAM)
 ```
 
-The segment address **B000h** is used (not B800h like standard CGA).
+This suggests the PC1 does **not** expose a simple four-way mirror across B000–BFFF in all modes. Treat any “mirrored four times” claim as **unverified** unless you confirm aliasing on your specific hardware.
 
 ### CGA-Style Interlacing
 The VRAM uses CGA-compatible interlaced layout:
@@ -755,8 +758,8 @@ out 0xDD, al        ; Close palette
 **Proven start addresses:**
 | Command | Entry | Status |
 |---------|-------|--------|
-| 0x40 | Entry 0 | ✅ Verified (palram series, BMP2) |
-| 0x44 | Entry 2 | ✅ Verified (BMP3, BMP4, BMP5, BMP7, BMP8, BMP9) |
+| 0x40 | Entry 0 | ✅ Verified (palram series, BMP2, E0 Reprogramming experiment) |
+| 0x44 | Entry 2 | ✅ Verified (BMP3, BMP5, BMP7, BMP8, BMP9) |
 | 0x48 | Entry 4 | ⚠️ Untested (BMP6 built for this but not better) |
 
 **This is a critical finding** — skipping entries 0–1 saves 4 I/O cycles per scanline and avoids corrupting entry 0 (background color). See Section 12c for the full Simone and Hero techniques that exploit this.
@@ -1040,16 +1043,64 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 
 # 🟦 12b. **SCI0 Driver Lessons** ✅
 
-*Verified by real PC1 hardware while building the SCI0 driver series (PC1-1..PC1-7).* 
+*Verified by real PC1 hardware while building the SCI0 driver series (PC1-1..PC1-8).* 
 
+**Core driver architecture (PC1-1 through PC1-7):**
 - SCI entry point must use the 3-byte `E9` jump convention; a plain `jmp` can break keyboard/interrupt behavior.
 - CGA interlace requires per-row interleaved writes; two-pass even/odd updates cause visible combing.
 - Direct framebuffer to VRAM conversion (3 transfers) is faster than line/full buffering (4 transfers) on the 8-bit bus.
 - Rectangle-aware updates are essential; full-frame copies are slower for typical SCI dirty regions.
 
+**V40-specific optimizations (PC1-8):**
+- `cs xlatb` allows reading a lookup table from CS while `lodsw` reads from a different DS segment — eliminates the need for an intermediate row buffer.
+- `dec cx` / `jnz` is faster than `loop` on the NEC V40.
+
+**Callback environment limitations (PC1-8):**
+- `int 16h` (BIOS keyboard) does **not work** inside SCI0 driver callbacks (`show_cursor`, `update_rect`, etc.). The BIOS keyboard handler appears to be in a blocked or re-entrant state.
+- **Workaround:** Read keyboard scancodes directly from port 0x60. This reliably returns the last key pressed/released, even inside driver callbacks.
+
+```asm
+; Direct keyboard read inside SCI0 callback
+in al, 0x60         ; Read last scancode (works where int 16h doesn't)
+cmp al, 0x39        ; Space bar make code?
+je .do_action
+cmp al, 0x1C        ; Enter make code?
+je .do_action
+```
+
 ---
 
-# 🟦 12c. **PC1-BMP: Per-Scanline Palette Reprogramming in 320×200×4 Mode** ✅
+# 🟦 12c. **Why V6355D Palette Adaptation Fails for Interactive Games** ✅
+
+*Verified on real PC1 hardware (February 2026, PC1-8 SCI0 driver experiments).*
+
+The V6355D's programmable palette works beautifully for **static image viewers** (PC1-BMP series, Section 12d below). For **interactive games** like Sierra SCI0, however, palette adaptation is fundamentally impractical. Two distinct approaches were tested; both fail for different reasons.
+
+### Approach 1: Per-Scanline Palette Streaming in update_rect
+
+The idea: during each `update_rect` call, wait for VSYNC and stream per-scanline palette data while writing pixels — just like PC1-BMP does for static images.
+
+**Why it fails:** SCI calls `update_rect` many times per frame (once per dirty rectangle — menus, animations, text, cursor). Each call would need a full 16ms VSYNC wait for synchronized streaming. With dozens of update_rect calls per scene change, a single frame takes **minutes** to fully draw. Static image viewers call update_rect once for the whole screen; games call it dozens of times for small regions.
+
+### Approach 2: Global Palette Change During VBlank
+
+The idea: analyze the SCI framebuffer to find the 3 most-used colors, reprogram all 16 DAC entries during VBlank, then continue normally.
+
+**Why it fails:** After changing the DAC, every pixel already in CGA VRAM is encoded for the **old** color mapping. Pixel value "01" used to mean cyan; now it means whatever the new Color1 is. But the VRAM still has pixels that were meant to be displayed as cyan. A full-screen redraw is needed to re-encode all pixels with the new XLAT table. This redraw (32KB read + 16KB write) takes ~200ms on the V40's 8-bit bus, causing a visible black flash between palette changes. And there is no SCI0 API to ask the game to redraw — the driver must do it manually.
+
+### The Fundamental Problem
+
+Per-scanline streaming requires **total control of frame timing** — the driver must own the entire VSYNC→display cycle. Static image viewers have this control. Game engines do not: they call driver functions at unpredictable times, in unpredictable order, for unpredictable screen regions.
+
+### What PC1-8 Actually Does
+
+PC1-8 renders CGA mode 4 at 320×200 with standard CGA colors (palette 1 high = cyan/magenta/white). On keypress (space/enter), it scans the SCI framebuffer, picks the 3 most-used colors, reprograms the DAC, and does a full redraw. This works as a proof of concept but is too slow for gameplay.
+
+See PC1-8.asm in the Sierra-SCI0-Driver-for-Olivetti-PC1 repository.
+
+---
+
+# 🟦 12d. **PC1-BMP: Per-Scanline Palette Reprogramming in 320×200×4 Mode** ✅
 
 *Verified by real PC1 hardware testing (February 2026, PC1-BMP viewer series).*
 
@@ -1812,6 +1863,51 @@ In CGA 320×200×4 color mode, each 2-bit pixel value maps to a V6355D palette e
 **Entry 1 is unused** — no pixel value maps to it when bg = entry 0. It must still be streamed through when writing entries 2+ (V6355D streams sequentially from entry 0).
 
 On standard IBM CGA, the palette entries have fixed RGBI colors (Palette 0 = Cyan/Magenta/White, Palette 1 = Green/Red/Brown). On the **V6355D, all 8 entries are fully programmable** to any RGB333 color via ports 0x3DD/0x3DE. The CGA default names are just power-on defaults — the V6355D can display any color in any entry.
+
+#### Full 16-Entry DAC Mapping (All Palette/Intensity Combinations) ✅
+
+*Verified on real PC1 hardware (February 2026, PC1-8 SCI0 driver + PC1PAL palette loader).*
+
+The BIOS sets both the palette (0x3D9 bit 5) and intensity (0x3D9 bit 4) at mode-set time, and games can change these at any point. The combination determines **which of the 16 DAC entries** the V6355D actually reads for each pixel value:
+
+| Pixel Value | Pal 1 High (most common) | Pal 1 Low | Pal 0 High | Pal 0 Low |
+|:-----------:|:------------------------:|:---------:|:----------:|:---------:|
+| 0           | entry 0                  | entry 0   | entry 0    | entry 0   |
+| 1           | entry 11                 | entry 3   | entry 10   | entry 2   |
+| 2           | entry 13                 | entry 5   | entry 12   | entry 4   |
+| 3           | entry 15                 | entry 7   | entry 14   | entry 6   |
+
+**"Palette 1 High" is the standard SCI0/Sierra default** — `int 10h, AX=0004` sets mode 4 with palette 1, high intensity.
+
+**Why this matters:** If you want to override CGA colors with custom V6355D RGB333 values, you must write your chosen colors to the correct DAC entries for the active palette/intensity combination. Since you can't always predict which combination a game or BIOS call will set, the safe approach is to **write all 16 DAC entries** (32 bytes), placing your chosen colors at every position that any combination might read:
+
+```asm
+; Safe global palette override — works regardless of palette/intensity setting
+; Places Color1 at entries 2,3,10,11 — Color2 at 4,5,12,13 — Color3 at 6,7,14,15
+program_palette:
+    mov al, 0x40
+    out 0xDD, al            ; Open palette write (starts at entry 0)
+    jmp short $+2
+    ; Entry 0: black (background)
+    xor al, al
+    out 0xDE, al
+    jmp short $+2
+    out 0xDE, al
+    jmp short $+2
+    ; Entry 1: black (unused in CGA mode 4)
+    out 0xDE, al
+    jmp short $+2
+    out 0xDE, al
+    jmp short $+2
+    ; Entries 2-15: place Color1/2/3 at all palette/intensity positions
+    ; (loop writes 14 entries = 28 bytes)
+    ; ...
+    mov al, 0x80
+    out 0xDD, al            ; Close palette write
+    ret
+```
+
+See PC1-8.asm (`program_palette`) and PC1PAL.asm (`apply_custom_palette`) for complete implementations.
 
 **Controlled by:** Port 0x3D9 (Color Select Register) — **NOT 0x3D8 as previously documented**
 - Bit 5: Palette select (0 = Palette 0, 1 = Palette 1)
