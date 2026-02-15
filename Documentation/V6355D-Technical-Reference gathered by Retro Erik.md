@@ -730,17 +730,36 @@ Counter-intuitively, adding delays before the 0x80 close command **increases cor
 
 **Theory:** The V6355D palette "streams forward" while the CPU waits. The palette pipeline continues advancing through entries until 0x80 is sent. Longer delays = more entries exposed to corruption.
 
-#### 4. No Direct Entry Selection
+#### 4. Direct Entry Selection: 0x44 Works! ✅ (Corrected February 2026)
 
-The V6355D does not support selecting an arbitrary palette entry:
+**⚠️ CORRECTION:** The original palram6 test claimed 0x42 and 0x44 do not work. This was wrong — **0x44 is verified working** in CGA 320×200×4 mode by the PC1-BMP viewer series (BMP3–BMP8, tested on real PC1 hardware).
+
+Writing 0x44 to port 0xDD opens the palette write stream at **entry 2** (byte offset 4 in the 32-byte palette), skipping entries 0–1 entirely:
 
 ```asm
-; DOES NOT WORK:
-mov al, 0x42        ; Try to select entry 2 directly
-out 0xDD, al        ; Result: still writes from entry 0!
+; WORKS in 320×200×4 mode (verified on real PC1 hardware):
+mov al, 0x44        ; Open palette at entry 2 (skip E0-E1)
+out 0xDD, al
+out 0xDE, al        ; E2 Red byte
+out 0xDE, al        ; E2 Green|Blue byte
+; ... auto-increments through E3, E4, etc.
+mov al, 0x80
+out 0xDD, al        ; Close palette
 ```
 
-Palette writes always stream sequentially from entry 0. To change entry N, you must write N×2 dummy bytes first—which causes corruption on entries 0 through N-1.
+**Why palram6 reported failure:** The palram6 experiment ran in 160×200×16 mode and was testing per-HBLANK multi-entry modification with 0x42 (odd offset). The PC1-BMP series uses 0x44 (even entry boundary) in 320×200×4 mode, which works reliably. It is possible that:
+- Only even-entry start addresses work (0x40, 0x44, 0x48, ...)
+- The 160×200×16 mode has different palette addressing
+- The palram6 test setup had other issues that masked 0x44's functionality
+
+**Proven start addresses:**
+| Command | Entry | Status |
+|---------|-------|--------|
+| 0x40 | Entry 0 | ✅ Verified (palram series, BMP2) |
+| 0x44 | Entry 2 | ✅ Verified (BMP3, BMP4, BMP5, BMP7, BMP8, BMP9) |
+| 0x48 | Entry 4 | ⚠️ Untested (BMP6 built for this but not better) |
+
+**This is a critical finding** — skipping entries 0–1 saves 4 I/O cycles per scanline and avoids corrupting entry 0 (background color). See Section 12c for the full Simone and Hero techniques that exploit this.
 
 #### 5. Optimizations That Helped
 
@@ -795,20 +814,20 @@ palram6 displays 16 color bars using entries 0-15. When entry 0 is modified, the
 | Write entries 0, 1 both dynamic | Entry 1 corrupted |
 | Write entry 0 dynamic, entries 1-2 static (to "absorb" bleed) | Made it WORSE |
 | Add delays before 0x80 close | Made it WORSE (3+ entries affected) |
-| Try direct entry selection (0x42, 0x44) | Does not work on V6355D |
+| Try direct entry selection (0x42) | 0x42 does not work (see correction in §4 above — 0x44 DOES work in 320×200×4 mode) |
 
 ### Hardware Theory: Palette Pipeline Behavior
 
 The V6355D appears to have an internal palette pipeline/latch system:
 
-1. **0x40 command** opens the palette write stream at entry 0
+1. **0x40 command** opens the palette write stream at entry 0; **0x44** opens at entry 2 (see §4 above)
 2. Each byte written advances the stream to the next entry
 3. **0x80 command** closes the stream
 4. During the transition, adjacent entries are in an undefined state
 5. The "stream" continues advancing while CPU executes instructions (even without writes)
 6. **Longer delays = more entries exposed to undefined state**
 
-This is fundamentally different from VGA DACs which support indexed random-access to any palette entry.
+This is different from VGA DACs which support indexed random-access to any palette entry. However, the V6355D does support at least some non-zero start addresses (0x44 proven, 0x48 untested), which is more flexible than initially thought.
 
 ### Practical Implications
 
@@ -998,7 +1017,7 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 - 32 bytes × I/O delay = too slow for per-scanline updates
 - Mid-frame palette tricks are not practical on PC1 for full palette rewrites **in a single video mode**
 
-**⚠️ UPDATE (February 2026):** When combined with **CGA palette flipping** (Section 17h), visible-area palette writes become viable. The key insight: while palette 0 is being drawn, entries {1, 3, 5, 7} are inactive and can be safely reprogrammed. Then you flip to palette 1, and entries {0, 2, 4, 6} become safe. This divides the workload across two scanlines and avoids writing entries the beam is actively reading. Streaming all 8 entries via 0xDD/0xDE takes ~160 cycles — well within the ~424 cycle visible-area budget. See cgaflip4.asm for a working demo.
+**⚠️ UPDATE (February 2026):** CGA palette flipping (Section 17h) was tested as a way to make visible-area palette writes viable. The theory: while palette 0 is being drawn, entries {1, 3, 5, 7} are inactive and could be safely reprogrammed during the visible area. **However, further testing (cgaflip5) proved this does NOT work on V6355D.** The palette write protocol itself (open 0x40 / stream via 0xDE / close 0x80) disrupts video output regardless of whether active or inactive entries are targeted, and regardless of the data values written. Even writing identical values to inactive entries causes visible blinking. The palette flip (0xD9 only, no palette RAM writes) is perfectly stable — confirmed with a split-screen test showing 6 distinct colors + black with zero flicker. See cgaflip4.asm (flickering) and cgaflip5.asm (stable flip-only) in PC1-Labs/demos/07-cga-palette-flip/.
 
 ### Per-Scanline Single Entry: Possible But Limited
 
@@ -1027,6 +1046,125 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 - CGA interlace requires per-row interleaved writes; two-pass even/odd updates cause visible combing.
 - Direct framebuffer to VRAM conversion (3 transfers) is faster than line/full buffering (4 transfers) on the 8-bit bus.
 - Rectangle-aware updates are essential; full-frame copies are slower for typical SCI dirty regions.
+
+---
+
+# 🟦 12c. **PC1-BMP: Per-Scanline Palette Reprogramming in 320×200×4 Mode** ✅
+
+*Verified by real PC1 hardware testing (February 2026, PC1-BMP viewer series).*
+
+The PC1-BMP viewer series proves that **per-scanline palette reprogramming in CGA 320×200×4 mode** is practical and can display 4-bit (16-color) BMP images with far more than 4 simultaneous colors. Two distinct techniques were developed, tested, and refined across multiple viewer versions, culminating in the **flip-first Simone technique** (PC1-BMP2 v4.0) which achieves 3 independent colors per scanline with near-zero flicker.
+
+### The Simone Technique — Flip-First (PC1-BMP2) ⭐
+
+**The best technique discovered.** Named after Simone Riminucci, who first demonstrated palette-flip reprogramming in his Monkey Island conversion on the Olivetti PC1.
+
+Uses CGA palette flip (port 0xD9 bit 5) to alternate between palette 0 and palette 1 each scanline, giving **3 fully independent colors per scanline** (plus black). Each scanline picks its own optimal 3 colors from the full 16-color BMP palette.
+
+**The flip-first breakthrough (v4.0):** The palette flip is the **very first instruction** after HBLANK detection — exactly as Simone prescribes ("calibrated at nanosecond"). This instantly reveals colors pre-loaded into inactive entries during the previous HBLANK. All subsequent palette writes target only NOW-INACTIVE entries, pre-loading for the next same-parity line (N+2). This eliminates virtually all flicker — the only remaining artifact is on the first scanline.
+
+**Palette entry mapping (alternating each scanline):**
+
+| Pixel Value | Even Lines (Pal 0) | Odd Lines (Pal 1) |
+|:-----------:|:-------------------:|:------------------:|
+| 0 | E0 = Black | E0 = Black |
+| 1 | E2 = Color A | E3 = Color A |
+| 2 | E4 = Color B | E5 = Color B |
+| 3 | E6 = Color C | E7 = Color C |
+
+**Per-scanline HBLANK flow (flip-first):**
+```
+HBLANK start ──┐
+               │ OUT PORT_COLOR    ← FLIP (instant, ~8 cycles) — reveals pre-loaded colors
+               │ OUT 0x44          ← Open palette at entry 2
+               │ 12× OUTSB        ← Stream E2-E7 (~168 cycles)
+               │   Active entries: same-value passthrough (harmless in HBLANK)
+               │   Inactive entries: line N+2 colors (pre-load for next same-parity flip)
+               │ OUT 0x80          ← Close palette
+               └── ~198 cycles total
+                   ├── First ~80 cycles: during HBLANK (invisible)
+                   └── Remaining ~118: visible area, writing INACTIVE entries only → invisible
+```
+
+**Why N+2, not N+1:** After flipping on line N, the inactive entries won't display until line N+2 (next same-parity line). Line N+1 uses the other palette, whose entries were pre-loaded by the previous iteration.
+
+**Interleaving pattern:**
+
+| After HBLANK for... | E2 | E3 | E4 | E5 | E6 | E7 |
+|---|---|---|---|---|---|---|
+| Even line N (flipped to pal 1) | N+2 A *(inactive)* | N+1 A *(pass)* | N+2 B *(inactive)* | N+1 B *(pass)* | N+2 C *(inactive)* | N+1 C *(pass)* |
+| Odd line N (flipped to pal 0) | N+1 A *(pass)* | N+2 A *(inactive)* | N+1 B *(pass)* | N+2 B *(inactive)* | N+1 C *(pass)* | N+2 C *(inactive)* |
+
+**Skip optimization:** Lines where `scanline_top3[N+2] == scanline_top3[N]` (all 3 colors identical across the 2-line same-parity gap) get ZERO palette writes — just the flip. For images with stable color regions, this skips 30–50% of lines.
+
+**Stability reordering:** Colors are sorted so the most globally common color occupies slot C (entries 6/7), maximizing skip opportunities across consecutive same-parity lines.
+
+**Results on real hardware:**
+
+| Version | Technique | Cycles | Flicker |
+|---------|-----------|--------|---------|
+| v2.0 (Old Versions) | Simone, 12×OUTSB, flip after write | ~198 | Moderate (visible-area active writes) |
+| v3.0 (Old Versions) | Same + stability reorder + skip | ~198 or 0 | Reduced (skip 30–50%) |
+| **PC1-BMP2 v4.0** | **Flip-first + N+2 pre-load + skip** | **~198 or 0** | **Near-zero (first scanline only)** |
+
+### The Hero Technique (Old Versions)
+
+Always uses CGA palette 0 (no palette flip). Two "global" colors are fixed across the entire image; a third "hero" color changes every scanline during HBLANK. Simpler than the Simone technique, but only 1 independent color per line.
+
+**Per-scanline HBLANK update:**
+```asm
+mov al, 0x44        ; Open palette at entry 2
+out 0xDD, al
+outsb               ; E2 Red    ~14 cycles
+outsb               ; E2 GB     ~14 cycles
+mov al, 0x80
+out 0xDD, al        ; Close — Total: ~48 cycles (fits in ~80 cycle HBLANK)
+```
+
+| Version | Technique | Cycles | Flicker |
+|---------|-----------|--------|---------|
+| v2.0 Hero HBLANK | 0x40 start, 8 individual OUTs | ~99 | Left-edge (~19 cycle spillover) |
+| v3.0 Hero OUTSB | 0x44 + 2×OUTSB + skip | ~48 | Zero |
+| v6.0 Hero 3-Method | Same, 3 switchable hero methods | ~48 | Zero |
+
+### Flip Hero Technique (Old Versions)
+
+Combines palette flip with hero approach: flip-first + N+2 pre-loading, but with only 1 hero per line + 2 shared global colors (E4=E5=global_a, E6=E7=global_b). Zero flicker on all 200 lines, but fewer colors per line than PC1-BMP2.
+
+| Lines | Cycles | Flicker | Colors/line |
+|-------|--------|---------|-------------|
+| Even | ~54 | Zero | 1 hero + 2 globals + black |
+| Odd | ~82 | Zero | 1 hero + 2 globals + black |
+
+### OUTSB Streaming: Critical V6355D Discovery
+
+**OUTSB works because of the NEC V40's instruction-fetch overhead.** Each OUTSB reads [DS:SI] and outputs to port [DX] in one instruction, but the ~14-cycle execution time includes fetch/decode cycles that give the V6355D time to latch each byte. This natural inter-byte gap is the key — it's slow enough for the V6355D but fast enough to fit in the HBLANK budget.
+
+| Streaming Method | Cycles/byte | V6355D Compatible | Fit in HBLANK (2 bytes) |
+|------------------|-------------|-------------------|------------------------|
+| LODSB + OUT | ~18 | ✅ Yes | ✅ Yes (~36 cycles) |
+| OUTSB | ~14 | ✅ Yes | ✅ Yes (~28 cycles) |
+| OUTSW | ~7 | ❌ No — too fast, can't latch | N/A |
+| REP OUTSB | ~4 | ❌ No — no inter-byte gap | N/A |
+
+### Full Technique Comparison
+
+| | Simone Flip-First (PC1-BMP2) | Hero (Old Versions) | Flip Hero (Old Versions) |
+|---|---|---|---|
+| **Colors/line** | **3 + black** | 3 + black | 3 + black |
+| **Independent/line** | **3** | 1 | 1 |
+| **Global colors** | None | 2 fixed | 2 fixed (shared) |
+| **Palette flip** | Yes | No | Yes |
+| **HBLANK cycles** | ~198 | ~48 | 54–82 |
+| **Flicker** | **First scanline only** | None | None |
+| **Best for** | **Best overall quality** | Maximum stability | N/A (superseded by PC1-BMP2) |
+
+### Reference
+
+See the PC1-BMP repository for full source code:
+- `PC1-BMP2.asm` — **Simone flip-first (recommended)**
+- `PC1-BMP3.asm` — Simone flip-first + dithering (4 switchable modes)
+- Earlier versions preserved in `Old Versions/` folder
 
 ---
 
@@ -1650,9 +1788,13 @@ The key insight: The V6355D supports **per-scanline CGA palette switching** by w
 
 **⚠️ CORRECTION (February 2026 — verified by Retro Erik on real PC1 hardware):** The original text here said port 0x3D8 (Mode Control Register). This is **wrong**. Palette select, background color, and intensity are all controlled by **port 0x3D9 (Color Select Register)**. Testing on V6355D hardware confirmed that writing bit 5 of 0x3D8 does NOT switch the palette — it produces solid colors with no alternation. Only 0x3D9 bit 5 works for palette select.
 
-**⚠️ Important clarification (addresses Section 12 contradiction):** Section 12 concluded that per-scanline palette RAM writes via 0x3DD/0x3DE are too slow for full palette updates. This is true when trying to rewrite all 16 entries in a single mode — but **CGA palette flipping changes the equation entirely**. By alternating between palette 0 and palette 1 every scanline, you only need to update the entries belonging to the **inactive** palette (the one not currently being drawn). While palette 0 is displayed on an even line, entries {1, 3, 5, 7} (palette 1's entries) are not being read by the video hardware and can be safely reprogrammed. Then you flip to palette 1, and entries {0, 2, 4, 6} become safe to write. This is the key insight that makes visible-area palette writes viable — and why it only works in combination with CGA palette flipping.
+**⚠️ Important clarification (addresses Section 12 contradiction):** Section 12 concluded that per-scanline palette RAM writes via 0x3DD/0x3DE are too slow for full palette updates. **Further testing confirms this conclusion is correct even with CGA palette flipping.** The original theory was that flipping between palette 0 and palette 1 would allow safe reprogramming of inactive entries during the visible area. While the timing fits (~160 cycles for 8 entries vs ~424 cycle visible-area budget), **the V6355D's palette write protocol itself disrupts video output.** Opening palette write mode (0x40 → 0xDD) and streaming data (0xDE) during the visible area causes visible blinking regardless of which entries are targeted or what values are written. Even writing identical values to only inactive entries produces blinking. The palette flip (0xD9 only) is perfectly stable; the disruption comes from the palette RAM write protocol (0xDD/0xDE). See cgaflip4.asm (flickering with streaming) and cgaflip5.asm (stable without streaming).
 
-**Advanced variant (verified working — cgaflip4.asm):** The palette flip (1 OUT to 0xD9) is done during HBLANK, then all 8 palette entries are streamed via 0xDD/0xDE during the visible area (~160 cycles of the ~424 cycle visible-area budget). The inactive palette's entries update cleanly. Writing the active palette's entries also works on V6355D but may produce minor horizontal glitches (the beam may momentarily read a partially-updated color). See PC1-Labs/demos/07-cga-palette-flip/cgaflip4.asm.
+**⚠️ DISPROVEN (February 2026 — cgaflip5 testing):** The paragraph below was the original theory. It has been disproven by testing.
+
+~~**Advanced variant (verified working — cgaflip4.asm):** The palette flip (1 OUT to 0xD9) is done during HBLANK, then all 8 palette entries are streamed via 0xDD/0xDE during the visible area (~160 cycles of the ~424 cycle visible-area budget). The inactive palette's entries update cleanly. Writing the active palette's entries also works on V6355D but may produce minor horizontal glitches (the beam may momentarily read a partially-updated color). See PC1-Labs/demos/07-cga-palette-flip/cgaflip4.asm.~~
+
+**Actual result:** cgaflip4 produces visible flickering/blinking. cgaflip5 tested multiple variants (active entries, inactive entries only, same-value writes, 2x slowed gradient) — all streaming variants flickered. Only the flip-only variant (no palette RAM writes during visible area) is perfectly stable.
 
 #### The Two CGA Palettes (320×200×4 Mode)
 
@@ -1680,18 +1822,20 @@ On standard IBM CGA, the palette entries have fixed RGBI colors (Palette 0 = Cya
 
 #### Switching Strategy (V6355D — Proven on Real Hardware)
 
-**The proven approach** (from cgaflip3/cgaflip4 experiments):
+**The proven approach** (from cgaflip3/cgaflip5 experiments):
 1. **Both PAL_EVEN and PAL_ODD use the same bg/border entry** (both bits 3-0 = 0 → entry 0 = black). This keeps the border stable.
 2. **On even scanlines (during HBLANK):** Write 0x00 to 0xD9 → palette 0, bg = entry 0
 3. **Display scanline** using entries {0, 2, 4, 6}
 4. **On odd scanlines (during HBLANK):** Write 0x20 to 0xD9 → palette 1, bg = entry 0
 5. **Display scanline** using entries {0, 3, 5, 7}
-6. **During visible area:** Reprogram the inactive palette's entries via 0xDD/0xDE (e.g. on an even line, write entries 3, 5, 7 for the next odd line)
-7. Repeat for all 200 scanlines, with per-line colors from a precalculated table
+6. ~~**During visible area:** Reprogram the inactive palette's entries via 0xDD/0xDE~~ **DISPROVEN — causes blinking (see cgaflip5)**
+7. Repeat for all 200 scanlines
+
+**⚠️ Per-scanline palette RAM streaming is NOT viable on V6355D.** The palette write protocol (0x40 open / 0xDE stream / 0x80 close) disrupts video output during the visible area. Palette entries must be set during VBLANK only (except for 1 entry per HBLANK via cgaflip3 approach).
 
 **Timing (verified on V40 @ 8 MHz):**
 - **HBLANK:** ~80 CPU cycles — fits 1 palette flip OUT, or up to 9 short-form OUTs (flip + open + 3 entries + close)
-- **Visible area:** ~424 CPU cycles — fits full 8-entry palette stream (open + 16 LODSB/OUT + close ≈ 160 cycles)
+- **Visible area:** ~424 CPU cycles — palette RAM writes during this period cause blinking
 - **Total scanline:** ~509 cycles
 - Using short port aliases (0xD9 instead of 0x3D9) saves ~4 cycles per OUT on V40
 
@@ -1701,8 +1845,11 @@ The "512 virtual colors" comes from the **V6355D's RGB333 palette**, not from CG
 
 - Each palette entry is programmed to any **RGB333 color** (3 bits per channel)
 - $2^3 × 2^3 × 2^3 = 512$ possible colors per entry
-- With per-scanline palette reprogramming, **every entry can be a different RGB333 color on every line**
-- 6 visible entries per line (entries 2-7, since 0=bg and 1=unused) × 200 lines = up to **1200 independently chosen colors per frame**, all from the 512-color RGB333 space
+- With per-scanline palette reprogramming (1 entry per HBLANK, cgaflip3 approach), **1 entry can be a different RGB333 color on every line**
+- The remaining 5 entries are fixed per frame (set during VBLANK)
+- 6 visible entries per line (entries 2-7, since 0=bg and 1=unused) = up to **6 fixed colors + 1 per-line gradient color per frame**, all from the 512-color RGB333 space
+
+**⚠️ CORRECTION:** Earlier versions of this document claimed "every entry can be a different RGB333 color on every line" via visible-area streaming. This has been disproven — the V6355D palette write protocol causes blinking during the visible area. Only 1 entry can be changed per HBLANK (cgaflip3 approach). Full palette changes require VBLANK.
 
 On standard IBM CGA (without programmable palette), per-scanline palette flipping would only give you 2 palettes × 16 backgrounds × 2 intensity = 64 combinations. The V6355D's programmable RGB333 palette is what makes the full 512-color space accessible.
 
@@ -1719,19 +1866,23 @@ Different scanlines can show completely different color sets, creating the appea
 #### Code Strategy
 
 ```asm
-; Pseudocode for per-scanline palette switching + palette RAM update (320×200×4)
+; Pseudocode for per-scanline palette switching (320×200×4)
 ; Uses short port aliases (0xD9 not 0x3D9) for speed on V40
+;
+; NOTE: Palette RAM streaming during visible area (via 0xDD/0xDE)
+; was tested and CAUSES BLINKING on V6355D. The code below shows
+; the stable flip-only approach. Palette entries are set once during
+; VBLANK via program_palette.
 
     ; Enable 320×200×4 graphics mode
     mov ax, 0x0004
     int 0x10
 
-    ; Program initial V6355D palette entries 0-7 via 0xDD/0xDE
+    ; Program all 8 V6355D palette entries during VBLANK
     call program_palette
 
 frame_loop:
     call wait_vblank
-    mov si, gradient_table      ; 200 lines × 16 bytes = 3200 bytes
     mov cx, 200
     mov bl, 0x00                ; PAL_EVEN: palette 0, bg=entry 0
     mov bh, 0x20                ; PAL_ODD:  palette 1, bg=entry 0
@@ -1744,27 +1895,18 @@ scanline_loop:
     mov al, bl
     out 0xD9, al                ; Color Select Register (NOT 0xD8!)
 
-    ; === VISIBLE AREA: stream all 8 entries from table ===
-    mov al, 0x40
-    out 0xDD, al                ; Open palette at entry 0
-    %rep 16
-    lodsb
-    out 0xDE, al                ; Stream 8 entries × 2 bytes each
-    %endrep
-    mov al, 0x80
-    out 0xDD, al                ; Close palette
+    ; NO palette RAM writes during visible area (causes blinking)
 
     xchg bl, bh                 ; Swap even/odd for next line
     loop scanline_loop
     jmp frame_loop
 
-; Gradient table: 16 bytes per line (entries 0-7, 2 bytes each)
-; Entries 0,1 = always 0,0 (black bg + unused)
-; Entries 2-7 = per-line RGB333 colors from 512-color space
-gradient_table:
-    db 0,0, 0,0, 7,0x00, 7,0x10, 0,0x70, 0,0x71, 7,0x70, 7,0x71  ; Line 0
-    db 0,0, 0,0, 7,0x10, 7,0x20, 0,0x71, 0,0x72, 7,0x71, 7,0x72  ; Line 1
-    ; ...198 more lines
+; Palette entries set during VBLANK:
+;   Entry 0 = black (bg/border for both palettes)
+;   Entry 1 = black (unused)
+;   Entries 2,4,6 = palette 0 colors (even lines)
+;   Entries 3,5,7 = palette 1 colors (odd lines)
+; Total: 6 freely programmable colors + black
 ```
 
 #### Advantages Over Dithering
@@ -1772,19 +1914,21 @@ gradient_table:
 | Technique | Colors per line | Total screen colors | Speed | Artifacts |
 |-----------|----------------|---------------------|-------|----------|
 | Standard 320×200×4 | 4 | 4 | Real-time | None |
-| Palette switching per line | 4 | 512 virtual | Real-time (with precalc) | Horizontal color bands visible |
+| Palette flip only (cgaflip5) | 4 | 6+black | Real-time | None — perfectly stable |
+| Palette flip + 1 HBLANK entry (cgaflip3) | 4 | 6+black+gradient | Real-time | Minor left-edge jitter |
+| ~~Palette flip + visible streaming~~ | ~~4~~ | ~~512 virtual~~ | ~~Real-time~~ | **BLINKING — not viable on V6355D** |
 | Standard 160×200×16 | 16 | 16 | Real-time | None |
 | Software dithering | 4 | 256 quasi | Slow (~3+ frames) | Dither patterns visible |
 
 #### Comparison to 160×200×16 Mode
 
-| Feature | 320×200×4 + Palette Switching | 160×200×16 (PC1 Hidden Mode) |
+| Feature | 320×200×4 + Palette Flip | 160×200×16 (PC1 Hidden Mode) |
 |---------|------------------------------|----------------------------|
 | Horizontal resolution | 320 pixels | 160 pixels |
 | Colors per scanline | 4 | 16 |
-| Total unique colors per frame | 512 (via switching) | 16 (fixed palette) |
-| Horizontal banding | Visible (different palettes) | None |
-| Complexity | High (timing-critical) | Low (static palette) |
+| Total unique colors per frame | 6+black (flip only) or 7+gradient (cgaflip3) | 16 (fixed palette) |
+| Stability | Perfectly stable (flip only) | Perfectly stable |
+| Complexity | Moderate (HBLANK timing) | Low (static palette) |
 
 #### Potential for 160×200×16 Mode Extension
 
@@ -1820,15 +1964,17 @@ The following demos in `PC1-Labs/demos/07-cga-palette-flip/` were tested and ver
 | Demo | Technique | Result |
 |------|-----------|--------|
 | **cgaflip3** | Palette flip + entry 2 rainbow gradient, all during HBLANK (9 OUTs) | ✅ Working — smooth gradient on band 1, solid black border |
-| **cgaflip4** | Palette flip during HBLANK (1 OUT) + all 8 entries streamed during visible area (16 LODSB+OUT) | ✅ Working — rainbow gradients on all 3 bands, minor horizontal glitches |
+| **cgaflip4** | Palette flip during HBLANK (1 OUT) + all 8 entries streamed during visible area (16 LODSB+OUT) | ❌ Flickering — palette write protocol disrupts V6355D output during visible area |
+| **cgaflip5** | Palette flip only (no palette RAM writes during visible area). Split-screen test: top=pal 0, bottom=pal 1 | ✅ Perfectly stable — 6 colors + black, zero flicker. Proves flip is solid; blinking was from palette streaming |
 
 Key corrections from experimental verification:
 
 1. **Port 0x3D9 bit 5** controls palette select — NOT port 0x3D8 bit 5 (0xD8 bit 5 produces solid colors with no alternation on V6355D)
 2. **0xD9 bits 3-0** select the palette entry for both pixel-value-0 AND the border (hardwired CGA rule, cannot be separated)
 3. **V6355D palette writes stream sequentially from entry 0** — command 0x40 always opens at entry 0, no random access
-4. **Visible-area palette RAM writes are viable** — the V6355D accepts palette changes while the beam is drawing, with only minor glitches
-5. **9 short-form OUTs fit in a single HBLANK** (~80 cycles budget on V40 @ 8 MHz)
+4. **Visible-area palette RAM writes cause blinking** — the V6355D palette write protocol (open/stream/close via 0xDD/0xDE) disrupts video output during the visible area, regardless of which entries are targeted or what values are written. Even writing identical values to inactive entries causes blinking.
+5. **Palette flip (0xD9 only) is perfectly stable** — confirmed with split-screen test on real hardware
+6. **9 short-form OUTs fit in a single HBLANK** (~80 cycles budget on V40 @ 8 MHz) — enough for flip + 1 palette entry change (cgaflip3)
 
 ---
 
@@ -1946,7 +2092,9 @@ For systems with 64KB video RAM (NOT PC1):
 | Mode unlock value | **0x4A** |
 | Palette port | 0x3DD/0x3DE |
 | Palette colors | 512 (RGB 3-3-3) |
-| Palette entries per HBLANK | **1 max** (see Section 5c) |
+| Palette entries per HBLANK (160×200×16) | **1 max** (see Section 5c) |
+| Palette entries per HBLANK (320×200×4) | **1 entry** via 0x44 start — fits in HBLANK (see Section 12c) |
+| Palette start address 0x44 | ✅ **Verified** — skips entries 0–1, starts at entry 2 |
 | Status port | 0x3DA (bit 0 = HSYNC, bit 3 = VBlank) |
 
 ---
