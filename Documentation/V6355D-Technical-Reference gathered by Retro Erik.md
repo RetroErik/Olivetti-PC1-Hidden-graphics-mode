@@ -4,7 +4,7 @@ By Retro Erik
 
 This document describes how video memory works on the PC1 with the Yamaha V6355D chip, and documents the **working code** that enables the hidden 160×200×16 graphics mode.
 
-**Status: SOLVED** — The hidden graphics mode is fully working in colorbar.asm, pc1-bmp.asm, and demo6.asm.
+**Status: SOLVED** — The hidden graphics mode is fully working in colorbar.asm and pc1-bmp.asm 
 
 ---
 
@@ -13,7 +13,7 @@ This document describes how video memory works on the PC1 with the Yamaha V6355D
 This document uses information from multiple sources. **Only trust information marked as VERIFIED.**
 
 ### ✅ VERIFIED ON REAL PC1 HARDWARE:
-- Working code: colorbar.asm, pc1-bmp.asm, demo6.asm, BB.asm
+- Working code: colorbar.asm, pc1-bmp.asm, demo6.asm, demo7b.asm, BB.asm
 - Simone Riminucci's discoveries and mouse driver (tested on real PC1)
 - PERITEL.COM behavior (tested on real PC1)
 
@@ -105,7 +105,7 @@ In tight loops (raster effects, sound playback), the difference adds up:
 | Scenario | OUTs/frame | Cycles Saved | Significant? |
 |----------|------------|--------------|--------------|
 | Per-scanline palette (palram demos) | 600 (200 × 3) | ~2400 cycles | **YES** |
-| Bitmap scroller (demo8) | ~5 (setup only) | ~20 cycles | No |
+| Bitmap scroller (demo7b) | ~5 (setup only) | ~20 cycles | No |
 | Sound playback | Thousands | Very significant | **YES** |
 
 ### Recommended Port Usage
@@ -1015,7 +1015,7 @@ Simone Riminucci tested "racing the beam" techniques (changing palette mid-frame
 
 > *"All tests to race the beam failed also on line basis. Changing 16 colors per line is too slow also for 80186, and I need to use many OUTs... maybe change only 4 colors could be achieved... but per line."*
 
-**Our own testing confirms this for single-mode operation:** In demo4, demo5, and demo6, we found that:
+**Our own testing confirms this for single-mode operation:** In demo4, demo5a, and demo6, we found that:
 - Palette changes require I/O delays between each byte
 - 32 bytes × I/O delay = too slow for per-scanline updates
 - Mid-frame palette tricks are not practical on PC1 for full palette rewrites **in a single video mode**
@@ -1628,7 +1628,7 @@ The CRTC reads from VRAM, not system RAM. This means:
 For images **larger than VRAM**, you must:
 1. Keep the full image in system RAM
 2. Copy a 200-row viewport to VRAM each frame
-3. R12/R13 cannot reduce this copying—use software blitting (demo7 approach)
+3. R12/R13 cannot reduce this copying—use software blitting (demo7b approach)
 
 We attempted to combine R12/R13 with a circular buffer technique (copy only 2 new rows per scroll, use R12/R13 to shift display) but this **failed due to the 384-byte gap problem** described below.
 
@@ -1638,7 +1638,7 @@ We attempted to combine R12/R13 with a circular buffer technique (copy only 2 ne
 |-----------|-------|------------------|---------|-------|
 | **R12/R13 Hardware Scroll** | Instant | 200 rows (VRAM size) | None | Works, but limited to VRAM content |
 | **Register 0x64 Fine Scroll** | Instant | ±8 rows adjustment | None | Monitor calibration only |
-| **Software Viewport Copy** | Slow (~16KB/frame) | Unlimited | Yes (without vsync) | demo7.asm - only working method for tall images |
+| **Software Viewport Copy** | Slow (~16KB/frame) | Unlimited | Yes (without vsync) | demo7b.asm - only working method for tall images |
 | **Circular Buffer + R12/R13** | ⚠️ FAILED | N/A | N/A | **384-byte gap bug** - see below |
 
 #### Circular Buffer Technique (Advanced)
@@ -1718,8 +1718,9 @@ After scroll (crtc_start = 80):
 ##### Demo Code Reference
 
 - **demo8a.asm** — Demonstrates the circular buffer concept with the gap bug visible
-- **demo8.asm** — Comprehensive documentation of all failed workaround attempts
-- **demo7.asm** — Uses full viewport copy (16KB/frame) to avoid the gap problem
+- **demo8b.asm** — Comprehensive documentation of all failed workaround attempts
+- **demo7a.asm** — R12/R13 hardware scroll test (has the 192-byte bank gap shift bug)
+- **demo7b.asm** — Uses full viewport copy (16KB/frame) to avoid the gap problem
 
 ##### Workarounds Tested ✅ ALL FAILED
 
@@ -1738,7 +1739,7 @@ After scroll (crtc_start = 80):
 
 **Solution C: Hybrid Periodic Refresh** ❌ STUTTERS BADLY
 - **Idea:** Fast circular updates for N frames, then full 16KB refresh when approaching gap.
-- **Result:** With 192-byte gap limit, can only do 2 fast frames (160 bytes each) before mandatory 16KB refresh. Pattern of "fast-fast-slow" is visibly stuttery and worse than demo7's consistent slow speed.
+- **Result:** With 192-byte gap limit, can only do 2 fast frames (160 bytes each) before mandatory 16KB refresh. Pattern of "fast-fast-slow" is visibly stuttery and worse than demo7b's consistent slow speed.
 - **Conclusion:** 2:1 ratio of fast:slow frames is not smooth enough for usable scrolling.
 
 ##### Why All Solutions Fail
@@ -1752,7 +1753,7 @@ This means **any** approach using R12/R13 with 200 visible rows will require a f
 
 ##### Conclusion
 
-**The circular buffer technique is fundamentally incompatible with 200-row CGA interlaced mode** due to the 384-byte gap and V6355D's non-standard CRTC address handling. For smooth scrolling of tall images, use software viewport copying (demo7 approach).
+**The circular buffer technique is fundamentally incompatible with 200-row CGA interlaced mode** due to the 384-byte gap and V6355D's non-standard CRTC address handling. For smooth scrolling of tall images, use software viewport copying (demo7b approach).
 
 ##### Future Investigation
 
@@ -2272,7 +2273,7 @@ Buena Park, California 90620
 # 🟩 **References & Sources**
 
 ### ✅ TRUSTED (Verified on PC1):
-1. **Working ASM Code** — colorbar.asm, pc1-bmp.asm, demo6.asm, BB.asm (proven on real hardware)
+1. **Working ASM Code** — colorbar.asm, pc1-bmp.asm, demo6.asm, demo7b.asm, BB.asm (proven on real hardware)
 2. **Simone Riminucci** — vcfed.org forums, discovered the hidden mode (tested on real PC1)
 3. **ACV-1030 Video Card Manual** — Third-party card with same V6355 chip, confirms bit 6 = 16-color mode
 
