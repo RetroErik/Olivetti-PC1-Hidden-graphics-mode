@@ -57,7 +57,7 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 - **Palette:** 16 entries × 2 bytes = 32 bytes. Byte 1: Red (bits 0–2), Byte 2: Green (bits 4–6) | Blue (bits 0–2). Written via ports 0xDD/0xDE with I/O delays required (300ns minimum cycle time)
 - **Video output:** Only RGB analog (SCART) supports the custom palette; RGBI digital shows standard CGA colors only
 - **Hardware sprite:** 16×16 monochrome cursor via INT 33h (requires Simone's mouse driver)
-- **Hardware scrolling:** CRTC R12/R13 works but limited to 16KB VRAM content; the 384-byte CGA interlace gap prevents circular buffer scrolling
+- **Hardware scrolling:** CRTC R12/R13 pans the display through VRAM. In 192-line mode (register 0x65 = 0x08), the 512-byte gap per bank allows true circular buffer scrolling — write 160 bytes/frame with CRTC MA wrapping at 8K, zero reloads (see demo8c in PC1-Labs)
 - **Vertical fine-scroll:** Register 0x64 bits 3–5 provide ±8 line adjustment (verified on real hardware)
 - **Per-scanline palette:** Max 1 entry per HBLANK in 160×200×16 mode; up to 6 entries in CGA 320×200×4 mode using the deferred open/close technique
 - **All 512 colors on screen:** In CGA mode 4, per-scanline palette flipping + deferred palette streaming can display all 512 RGB333 colors simultaneously (verified on real hardware, see cgaflip9)
