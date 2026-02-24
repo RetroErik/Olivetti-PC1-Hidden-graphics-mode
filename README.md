@@ -9,7 +9,7 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC that supports a hidden 16
 | Component | Details |
 |-----------|---------|
 | **Computer** | Olivetti Prodest PC1 (Italian XT-compatible) |
-| **CPU** | NEC V40 (8088/80186-compatible) |
+| **CPU** | NEC V40 (8088/80186-compatible), 7.159 MHz Turbo / 4.773 MHz Normal |
 | **Video Chip** | Yamaha V6355D LCDC |
 | **VRAM** | 16KB DRAM at segment 0xB000 |
 | **Display** | RGB analog via SCART (PAL standard) |
@@ -60,6 +60,8 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 - **Hardware scrolling:** CRTC R12/R13 pans the display through VRAM. In 192-line mode (register 0x65 = 0x08), the 512-byte gap per bank allows true circular buffer scrolling — write 160 bytes/frame with CRTC MA wrapping at 8K, zero reloads (see demo8c in PC1-Labs)
 - **Vertical fine-scroll:** Register 0x64 bits 3–5 provide ±8 line adjustment (verified on real hardware)
 - **Per-scanline palette:** Max 1 entry per HBLANK in 160×200×16 mode; up to 6 entries in CGA 320×200×4 mode using the deferred open/close technique
+- **PIT raster bars:** PIT interrupts verified working for per-scanline color changes (76 PIT ticks/scanline, 313 lines/frame, 50 Hz PAL). HSYNC polling jitter (4-8 pixels) still present.
+- **CPU/pixel phase-lock:** In Turbo mode, CPU clock = pixel clock (7.159 MHz = DCK ÷ 2). 1 CPU cycle = 1 pixel, 456 cycles/scanline. No V6355D bus contention on system RAM. Cycle-counted beam racing is feasible. See PC1-CLOCK-DISCOVERY.md.
 - **All 512 colors on screen:** In CGA mode 4, per-scanline palette flipping + deferred palette streaming can display all 512 RGB333 colors simultaneously (verified on real hardware, see cgaflip9)
 - **Vertical line count:** Register 0x65 bits 0–1 select 192, 200, or 204 rows. 204-row mode (from Simone, untested) nearly fills all 16KB VRAM
 - **Software fonts required:** The hardware character generator does not work properly in this mode
