@@ -62,7 +62,7 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 - **Per-scanline palette:** Max 1 entry per HBLANK in 160×200×16 mode; up to 6 entries in CGA 320×200×4 mode using the deferred open/close technique
 - **PIT raster bars:** PIT interrupts verified working for per-scanline color changes (76 PIT ticks/scanline, 313 lines/frame, 50 Hz PAL). HSYNC polling jitter (4-8 pixels) still present.
 - **CPU/pixel phase-lock:** In Turbo mode, CPU clock = pixel clock (7.159 MHz = DCK ÷ 2). 1 CPU cycle = 1 pixel, 456 cycles/scanline. No V6355D bus contention on system RAM. Cycle-counted beam racing is feasible. See PC1-CLOCK-DISCOVERY.md.
-- **All 512 colors on screen:** In CGA mode 4, per-scanline palette flipping + deferred palette streaming can display all 512 RGB333 colors simultaneously (verified on real hardware, see cgaflip9)
+- **All 512 colors on screen:** In CGA mode 4, per-scanline palette flipping + deferred palette streaming can display all 512 RGB333 colors simultaneously (verified on real hardware, see cgaflip9 and pc12-bmp4)
 - **Vertical line count:** Register 0x65 bits 0–1 select 192, 200, or 204 rows. 204-row mode (from Simone, untested) nearly fills all 16KB VRAM
 - **Software fonts required:** The hardware character generator does not work properly in this mode
 
