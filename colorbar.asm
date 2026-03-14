@@ -202,7 +202,8 @@ enable_graphics_mode:
     mov ax, 0x0004
     int 0x10
     
-    ; --- CONFIGURATION MODE REGISTER (Register 0x67) ---
+    ; --- CONFIGURATION MODE REGISTER (Register 0x67) --- 
+    ; Not necessary for video initialization but kept for documentation purpose.
     ; Sets V6355D register 0x67 to 0x18:
     ; Bit 7: [0] 16-bit bus mode OFF - MUST be 0 on PC1's 8-bit bus!
     ;            If set on 8-bit bus, controller can only access odd bytes of VRAM.
@@ -220,6 +221,7 @@ enable_graphics_mode:
     jmp short $+2
     
     ; --- SET MONITOR CONTROL REGISTER (Register 0x65) FIRST ---
+    ; Not necessary for video initialization but kept for documentation purpose.
     ; This register sets operational requirements for the video interface.
     ; Per 6355 LCDC manual Table 14-28 and Table 14-21:
     ; Bit 0-1: [01] Vertical line count = 200 lines (01b not 00b which equals 192 lines)
