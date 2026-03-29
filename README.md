@@ -7,7 +7,9 @@ By **Retro Erik** — [YouTube: Retro Hardware and Software](https://www.youtube
 ![Olivetti Prodest PC1](https://img.shields.io/badge/Platform-Olivetti%20Prodest%20PC1-blue)
 ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-green)
 
-### 📥 [Download Colorbar.com — interactive demo of the hidden mode](Colorbar.com)
+### � [V6355D Technical Reference — complete hardware documentation](Documentation/V6355D-Technical-Reference%20gathered%20by%20Retro%20Erik.md)
+
+### �📥 [Download Colorbar.com — interactive demo of the hidden mode](Colorbar.com)
 
 ## Overview
 
