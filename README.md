@@ -75,9 +75,7 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 
 ## Documentation
 
-For comprehensive technical documentation covering all registers, palette programming, per-scanline techniques, hardware sprite, scrolling, and verified hardware findings, see:
-
-**[V6355D Technical Reference](Documentation/V6355D-Technical-Reference%20gathered%20by%20Retro%20Erik.md)**
+For the comprehensive V6355D Technical Reference covering all registers, palette programming, per-scanline techniques, hardware sprite, scrolling, and verified hardware findings, please contact the author Dag Erik Hagesæter (Retro Erik).
 
 ## Credits
 
