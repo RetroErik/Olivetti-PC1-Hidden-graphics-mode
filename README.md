@@ -31,7 +31,14 @@ mov al, 0x4A        ; Bit 6 = 16-color mode unlock
 out 0xD8, al        ; Write to Mode Control Register — THAT'S IT!
 ```
 
-That single I/O write is all that's required. The PC1 BIOS defaults for registers 0x65 and 0x67 are already correct for PAL/CRT operation.
+That single I/O write is all that's required. The PC1 BIOS defaults for registers 0x65 and 0x67 are already correct for PAL/CRT operation:
+
+| Register | Port | Default | Function |
+|----------|------|---------|----------|
+| **0x65** | 0x3DD/0x3DE | `0x09` | Monitor control: 200 lines, PAL, color, CRT. Bits 0–1 select line count: 00=192, 01=200, 10=204 |
+| **0x67** | 0x3DD/0x3DE | `0x18` | Horizontal position: 8-bit bus + centering. Skip this write to preserve PERITEL.COM's SCART adjustment |
+
+**Caution:** Writing register 0x65 via port 0x3DD *after* palette init corrupts palette state (0x65 falls in the palette command range 0x40–0x4F). Write 0x65 *before* palette init, or follow with `mov al, 0x80 / out 0x3DD, al` + palette restore.
 
 ### Compilation
 
