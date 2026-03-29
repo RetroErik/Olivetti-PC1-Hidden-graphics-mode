@@ -99,10 +99,6 @@ Found a bug or improvement? Feel free to create an issue or pull request!
 
 ---
 
-**Last Updated:** February 2026
-
----
-
 ## YouTube
 
 For more retro computing content, visit my YouTube channel **Retro Hardware and Software**:
