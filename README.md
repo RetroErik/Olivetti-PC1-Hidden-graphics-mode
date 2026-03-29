@@ -2,6 +2,13 @@
 
 Enable the undocumented 160×200×16 color graphics mode on the Olivetti Prodest PC1 with a custom 512-color palette.
 
+By **Retro Erik** — [YouTube: Retro Hardware and Software](https://www.youtube.com/@RetroErik)
+
+![Olivetti Prodest PC1](https://img.shields.io/badge/Platform-Olivetti%20Prodest%20PC1-blue)
+![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-green)
+
+### 📥 [Download Colorbar.com — interactive demo of the hidden mode](Colorbar.com)
+
 ## Overview
 
 The Olivetti Prodest PC1 features a Yamaha V6355D LCDC that supports a hidden 160×200×16 color graphics mode not enabled by the BIOS. This project provides assembly code to unlock and utilize this capability.
