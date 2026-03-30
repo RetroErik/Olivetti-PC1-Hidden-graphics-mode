@@ -80,6 +80,60 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 - **Vertical line count:** Register 0x65 bits 0–1 select 192, 200, or 204 rows. 204-row mode (from Simone, untested) nearly fills all 16KB VRAM
 - **Software fonts required:** The hardware character generator does not work properly in this mode
 
+## Screenshots
+
+*COLORBAR.COM running on real Olivetti Prodest PC1 hardware — 160×200×16 hidden graphics mode:*
+
+<p>
+<em>Gradient dither demo — Red</em><br>
+<img src="Screenshots/20260127_201443.jpg" width="60%" alt="Red gradient dither demo">
+</p>
+
+<p>
+<em>Gradient dither demo — Blue</em><br>
+<img src="Screenshots/20260127_201456.jpg" width="60%" alt="Blue gradient dither demo">
+</p>
+
+<p>
+<em>Gradient dither demo — Green</em><br>
+<img src="Screenshots/20260127_201507.jpg" width="60%" alt="Green gradient dither demo">
+</p>
+
+<p>
+<em>Gradient dither demo — Gray</em><br>
+<img src="Screenshots/20260127_201513.jpg" width="60%" alt="Gray gradient dither demo">
+</p>
+
+<p>
+<em>Test pattern on LCD monitor</em><br>
+<img src="Screenshots/Test_Pattern.png" width="60%" alt="Test pattern on LCD monitor">
+</p>
+
+<p>
+<em>16 color bars — CGA palette</em><br>
+<img src="Screenshots/20260127_201534.jpg" width="60%" alt="16 color bars - CGA palette">
+</p>
+
+<p>
+<em>16 color bars — random palette</em><br>
+<img src="Screenshots/20260127_201536.jpg" width="60%" alt="Random palette color bars">
+</p>
+
+<p>
+<em>16 color bars — random palette</em><br>
+<img src="Screenshots/20260127_201539.jpg" width="60%" alt="Random palette color bars">
+</p>
+
+<p>
+<em>16 color bars — random palette</em><br>
+<img src="Screenshots/20260127_201544.jpg" width="60%" alt="Random palette color bars">
+</p>
+
+<p>
+<em>Circle drawn over color bars</em><br>
+<img src="Screenshots/20260127_201558.jpg" width="60%" alt="Circle drawn over color bars">
+</p>
+
 ## Documentation
 
 For the comprehensive V6355D Technical Reference covering all registers, palette programming, per-scanline techniques, hardware sprite, scrolling, and verified hardware findings, please contact the author Dag Erik Hagesæter (Retro Erik).
