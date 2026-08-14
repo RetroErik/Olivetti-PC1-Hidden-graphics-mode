@@ -201,7 +201,7 @@ The following is a description of the monitor control registers function.
      0      SCR0      Select screen vertical line number
      1      SCR1      The same as bit 0 
      2      512/256   Select screen horizontal dot number
-     3      PAL       Select PAL SESAM/NTSC
+     3      PAL       Select PAL SECAM/NTSC
      4      MONO      Select monochrome/color monitor
      5                Always write 0
      6                Always write 0
