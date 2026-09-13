@@ -1,6 +1,8 @@
 ; ============================================================================
-; COLORBAR.ASM (v 1.0) - Hidden graphics mode demo for Olivetti Prodest PC1
+; COLORBAR.ASM (v 1.1) - Hidden graphics mode demo for Olivetti Prodest PC1
 ; Hidden 160x200x16 Graphics Mode
+; v1.1: Switched all V6355D I/O to canonical full 0x3Dx ports (via DX) so the
+;       demo also runs correctly on SerdaVision in AT-class 286/386/486 PCs.
 ; Written for NASM - NEC V40 (80186 compatible)
 ; By Retro Erik - 2026 using VS Code with Co-Pilot
 ;
@@ -27,11 +29,28 @@
 VIDEO_SEG       equ 0xB000      ; PC1 video RAM segment (not B800 like standard CGA!)
 
 ; --- Yamaha V6355D I/O Ports ---
-; Note: 0xDD/0xDE and 0x3DD/0x3DE are aliases on PC1 hardware
-PORT_REG_ADDR   equ 0xDD        ; Register Bank Address Port (select register 0x00-0x7F)
-PORT_REG_DATA   equ 0xDE        ; Register Bank Data Port (read/write selected register)
-PORT_MODE       equ 0xD8        ; Mode Control Register (CGA compatible + extensions)
-PORT_COLOR      equ 0xD9        ; Color Select Register (border color, palette index 0-15)
+; PC1 aliases: D8/D9/DD/DE and 3D8/3D9/3DD/3DE all reach the same V6355D
+; registers on real PC1 hardware. This source deliberately uses the full
+; 3D* ports so it is also safe for SerdaVision on AT-class 286/386/486
+; machines, where the short D8/D9/DD/DE addresses overlap the second DMA
+; controller's port range. Full ports work fine on the real PC1 too, since
+; they are aliases there.
+PORT_REG_ADDR   equ 0x3DD       ; Register Bank Address Port (select register 0x00-0x7F)
+PORT_REG_DATA   equ 0x3DE       ; Register Bank Data Port (read/write selected register)
+PORT_MODE       equ 0x3D8       ; Mode Control Register (CGA compatible + extensions)
+PORT_COLOR      equ 0x3D9       ; Color Select Register (border color, palette index 0-15)
+
+; ============================================================================
+; V6355_OUT - write AL to a full V6355D port (>0xFF) through DX
+; An x86 immediate-port OUT only encodes an 8-bit port number, so ports above
+; 0xFF must go through DX. This macro preserves DX around the write.
+; ============================================================================
+%macro V6355_OUT 1
+    push dx
+    mov dx, %1
+    out dx, al
+    pop dx
+%endmacro
 
 ; --- Screen Dimensions (160x200x16 hidden mode) ---
 SCREEN_WIDTH    equ 160         ; Horizontal resolution in pixels
@@ -214,10 +233,12 @@ enable_graphics_mode:
     ; Bits 0-2: [000] Horizontal centering offset (default) Range: 0-31 (5 bits total)
     ; Binary: 00011000b (0x18)
     mov al, 0x67
-    out PORT_REG_ADDR, al
+    mov dx, PORT_REG_ADDR
+    out dx, al
     jmp short $+2
     mov al, 0x18            ; 8-bit bus, no paging, h-position=24
-    out PORT_REG_DATA, al
+    mov dx, PORT_REG_DATA
+    out dx, al
     jmp short $+2
     
     ; --- SET MONITOR CONTROL REGISTER (Register 0x65) FIRST ---
@@ -245,13 +266,15 @@ enable_graphics_mode:
     ; Value: 0x09 (00001001b) = 200 lines, PAL, color, CRT
     ; Access via Register Bank: PORT_REG_ADDR (0xDD) / PORT_REG_DATA (0xDE)
     mov al, 0x65
-    out PORT_REG_ADDR, al
+    mov dx, PORT_REG_ADDR
+    out dx, al
     jmp short $+2
     mov al, 0x09
-    out PORT_REG_DATA, al
+    mov dx, PORT_REG_DATA
+    out dx, al
     jmp short $+2
     
-    ; --- UNLOCK 16-COLOR MODE (Port 0xD8, value 0x4A) ---
+    ; --- UNLOCK 16-COLOR MODE (Port 0x3D8, value 0x4A) ---
     ; This is the CGA Mode Control Register, but the PC1's Yamaha V6355D 
     ; repurposes several bits for extended functionality.
     ;
@@ -277,14 +300,16 @@ enable_graphics_mode:
     ;   Bit 1 = 1 (Graphics mode)
     ;   All other bits = 0
     mov al, 0x4A
-    out PORT_MODE, al
+    mov dx, PORT_MODE
+    out dx, al
     jmp short $+2
     jmp short $+2
     
-    ; Port 0xD9: 0x00 = black border
+    ; Port 0x3D9: 0x00 = black border
     mov byte [border_color], 0
     xor al, al
-    out PORT_COLOR, al
+    mov dx, PORT_COLOR
+    out dx, al
     jmp short $+2
     jmp short $+2
     
@@ -308,10 +333,12 @@ disable_graphics_mode:
     ; Bits 0-4: [00000] Horizontal position (default)
     ; Binary: 00000000b
     mov al, 0x67            ; Select register 0x67
-    out PORT_REG_ADDR, al   ; Register Bank Address Port
+    mov dx, PORT_REG_ADDR
+    out dx, al              ; Register Bank Address Port
     jmp short $+2           ; I/O delay
     mov al, 0x00            ; Reset to defaults
-    out PORT_REG_DATA, al   ; Register Bank Data Port
+    mov dx, PORT_REG_DATA
+    out dx, al              ; Register Bank Data Port
     jmp short $+2           ; I/O delay
     
     ; --- RESET MONITOR CONTROL REGISTER (Register 0x65) ---
@@ -322,17 +349,20 @@ disable_graphics_mode:
     ; Per 6355 LCDC port map: 0x3DD = Register Bank Address, 0x3DE = Register Bank Data
     ; Note: On PC1, 0xDD/0xDE and 0x3DD/0x3DE are aliases and function identically.
     mov al, 0x65            ; Select register 0x65
-    out PORT_REG_ADDR, al   ; Register Bank Address Port
+    mov dx, PORT_REG_ADDR
+    out dx, al              ; Register Bank Address Port
     jmp short $+2           ; I/O delay
     mov al, 0x09            ; Keep 200 lines, PAL (safe default)
-    out PORT_REG_DATA, al   ; Register Bank Data Port
+    mov dx, PORT_REG_DATA
+    out dx, al              ; Register Bank Data Port
     jmp short $+2           ; I/O delay
     
-    ; --- RESET 16-COLOR MODE (Port 0xD8, value 0x28) ---
+    ; --- RESET 16-COLOR MODE (Port 0x3D8, value 0x28) ---
     ; Reset mode control port to standard CGA mode
     ; 0x28 = text mode (bit 5=1 blink, bit 3=1 video on)
     mov al, 0x28
-    out PORT_MODE, al
+    mov dx, PORT_MODE
+    out dx, al
     jmp short $+2
     
     pop dx
@@ -364,9 +394,9 @@ clear_screen:
 
 ; ============================================================================
 ; set_palette - Write the 16-color palette to the 6355 chip
-;   MOV AL, 0x40 / OUT 0xDD, AL   ; Enable palette write
-;   Loop with OUT to port 0xDE    ; Output 32 bytes with I/O delays
-;   MOV AL, 0x80 / OUT 0xDD, AL   ; Disable palette write
+;   MOV DX,3DDh / MOV AL,0x40 / OUT DX,AL  ; Enable palette write
+;   Loop with OUT DX,AL to port 0x3DE      ; Output 32 bytes with I/O delays
+;   MOV DX,3DDh / MOV AL,0x80 / OUT DX,AL  ; Disable palette write
 ;
 ; Palette format: 32 bytes (16 colors × 2 bytes each)
 ;   Byte 1: Red intensity (bits 0-2, values 0-7)
@@ -376,33 +406,38 @@ set_palette:
     push ax
     push cx
     push si
+    push dx
     
     cli                     ; Disable interrupts during palette write
     
-    ; Enable palette write mode (write 0x40 to port 0xDD)
+    ; Enable palette write mode (write 0x40 to full port 0x3DD)
+    mov dx, PORT_REG_ADDR
     mov al, 0x40
-    out PORT_REG_ADDR, al
+    out dx, al
     jmp short $+2           ; I/O delay
     jmp short $+2
     
     ; Write 32 bytes of palette data with I/O delays (PC1 hardware needs this!)
     mov si, palette
     mov cx, 32              ; 16 colors × 2 bytes
+    mov dx, PORT_REG_DATA   ; DX stays on the data port for the whole loop
     
 .pal_write_loop:
     lodsb                   ; Load byte from DS:SI into AL, inc SI
-    out PORT_REG_DATA, al   ; Write to port 0xDE
+    out dx, al              ; Write to full port 0x3DE
     jmp short $+2           ; I/O delay
     loop .pal_write_loop
     
-    ; Disable palette write mode (write 0x80 to port 0xDD)
+    ; Disable palette write mode (write 0x80 to full port 0x3DD)
     jmp short $+2           ; Extra delay before mode change
+    mov dx, PORT_REG_ADDR
     mov al, 0x80
-    out PORT_REG_ADDR, al
+    out dx, al
     jmp short $+2           ; I/O delay
     
     sti                     ; Re-enable interrupts
     
+    pop dx
     pop si
     pop cx
     pop ax
@@ -528,7 +563,8 @@ cycle_border:
     mov [border_color], al
     
     ; Output to border color port
-    out PORT_COLOR, al
+    mov dx, PORT_COLOR
+    out dx, al
     
     pop dx
     pop ax
@@ -1256,7 +1292,7 @@ reset_screen:
     mov byte [bar_width], 10
     mov byte [border_color], 0
     xor al, al
-    out PORT_COLOR, al      ; Reset border to black
+    V6355_OUT PORT_COLOR    ; Reset border to black
     call draw_color_bars
     ret
 

@@ -24,11 +24,19 @@ The Olivetti Prodest PC1 features a Yamaha V6355D LCDC that supports a hidden 16
 
 ## Quick Start
 
+> **v1.1 note:** COLORBAR.COM now writes the V6355D exclusively through the
+> full `0x3D8/0x3D9/0x3DD/0x3DE` ports (via `DX`), instead of the short
+> `0xD8/0xD9/0xDD/0xDE` aliases. Both address ranges are aliases on the real
+> PC1, but the short ports overlap the second DMA controller's I/O range on
+> AT-class 286/386/486 machines, so the full ports are required for
+> SerdaVision to work correctly on those systems.
+
 ### Enable the Hidden Mode
 
 ```asm
 mov al, 0x4A        ; Bit 6 = 16-color mode unlock
-out 0xD8, al        ; Write to Mode Control Register — THAT'S IT!
+mov dx, 0x3D8        ; Full port required: OUT imm8 only encodes 8-bit ports
+out dx, al           ; Write to Mode Control Register — THAT'S IT!
 ```
 
 That single I/O write is all that's required. The PC1 BIOS defaults for registers 0x65 and 0x67 are already correct for PAL/CRT operation:
@@ -65,10 +73,10 @@ Interactive demonstration of the hidden 160×200×16 graphics mode.
 
 ## Key Technical Facts
 
-- **Mode unlock:** Write 0x4A to port 0xD8 (aliases: 0xD8 = 0x3D8 on PC1)
+- **Mode unlock:** Write 0x4A to port 0x3D8 (aliases: 0x3D8 = 0xD8 on PC1; the code uses 0x3D8 via DX for SerdaVision/AT compatibility)
 - **Pixel format:** Packed nibbles — high nibble = left pixel, low nibble = right pixel (2 pixels per byte, 80 bytes/row)
 - **Memory layout:** CGA-style interlaced / non-interleaved — even rows at 0x0000, odd rows at 0x2000 (8KB per bank)
-- **Palette:** 16 entries × 2 bytes = 32 bytes. Byte 1: Red (bits 0–2), Byte 2: Green (bits 4–6) | Blue (bits 0–2). Written via ports 0xDD/0xDE with I/O delays required (300ns minimum cycle time)
+- **Palette:** 16 entries × 2 bytes = 32 bytes. Byte 1: Red (bits 0–2), Byte 2: Green (bits 4–6) | Blue (bits 0–2). Written via ports 0x3DD/0x3DE with I/O delays required (300ns minimum cycle time)
 - **Video output:** Only RGB analog (SCART) supports the custom palette; RGBI digital shows standard CGA colors only
 - **Hardware sprite:** 16×16 monochrome cursor via INT 33h (requires Simone's mouse driver)
 - **Hardware scrolling:** CRTC R12/R13 pans the display through VRAM. In 192-line mode (register 0x65 = 0x08), the 512-byte gap per bank allows true circular buffer scrolling — write 160 bytes/frame with CRTC MA wrapping at 8K, zero reloads (see demo8c in PC1-Labs)
